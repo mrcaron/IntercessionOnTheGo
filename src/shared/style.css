@@ -4,42 +4,24 @@
 @import '@fontsource/hanken-grotesk/latin-600.css';
 
 :root {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --ink: #252525;
-  --muted: #5e5e5e;
-  --line: #dddddd;
-  --accent: #ec5d56; /* brand coral: fills and borders */
-  --accent-ink: #252525; /* text on coral (white on coral is only 3.3:1) */
-  --accent-text: #c23b35; /* coral for text on white (5.3:1) */
-  --accent-soft: #fdebeb;
-  --good: #2f6372;
-  --good-soft: #e3f0f2;
-  --danger: #b3261e;
-  --bubble-me: #fdebeb;
+  --bg: #252525; /* 24-7 Prayer black */
+  --surface: #2e2e2e;
+  --ink: #ffffff;
+  --muted: #bdbdbd;
+  --line: #484848;
+  --accent: #ec5d56; /* brand coral: fills, borders, headings */
+  --accent-ink: #252525; /* text on coral buttons */
+  --accent-text: #ec5d56; /* coral text on black (4.6:1) */
+  --accent-soft: #3a2a2a;
+  --good: #94dee5;
+  --good-soft: #1f3a40;
+  --danger: #ff8a84;
+  --bubble-me: #3c2f2f;
   --radius: 14px;
   --display: 'Lexend Giga', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
   --label: 'Lexend Mega', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
   --sans: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #252525;
-    --surface: #2e2e2e;
-    --ink: #f4f4f4;
-    --muted: #b4b4b4;
-    --line: #484848;
-    --accent: #ec5d56;
-    --accent-ink: #252525;
-    --accent-text: #ff8a84;
-    --accent-soft: #3a2a2a;
-    --good: #94dee5;
-    --good-soft: #1f3a40;
-    --danger: #ff8a84;
-    --bubble-me: #3c2f2f;
-  }
+  color-scheme: dark;
 }
 
 * {
@@ -246,13 +228,13 @@ button.block {
   border-radius: var(--radius);
   padding: 14px 16px;
   margin: 18px 0;
-  background: var(--accent-soft);
+  background: #ec5d56;
+  color: #ffffff;
+  font-weight: 600;
 }
 
-.banner.good {
-  background: var(--good-soft);
-  color: var(--good);
-  font-weight: 600;
+.banner button.link {
+  color: #ffffff;
 }
 
 .error {
@@ -371,7 +353,7 @@ button.block {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--surface);
+  background: #ffffff;
   box-shadow: 0 1px 2px rgb(0 0 0 / 30%);
   transition: transform 0.15s;
 }
