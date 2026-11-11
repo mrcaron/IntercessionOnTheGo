@@ -5,6 +5,12 @@ name, a prayer request, or chat with you anonymously. You get a notification,
 pray, and tap 🙏; their page updates at once. Each page erases itself after one
 hour unless the rider presses pause (each press adds 24 hours).
 
+## Demo
+
+[![Watch the demo: a rider scans the hat, sends a request, and sees it prayed for](docs/demo-poster.png)](https://youtu.be/otHNt3nmBQg)
+
+Watch a rider scan the hat, send a request, and see it prayed for live.
+
 ## How it keeps its promises
 
 - **Only the two of you can read it.** The rider's phone makes a random page
