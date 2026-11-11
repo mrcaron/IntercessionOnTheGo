@@ -1,36 +1,44 @@
+@import '@fontsource/lexend-giga/latin-500.css';
+@import '@fontsource/lexend-mega/latin-700.css';
+@import '@fontsource/hanken-grotesk/latin-400.css';
+@import '@fontsource/hanken-grotesk/latin-600.css';
+
 :root {
-  --bg: #f7f1e6;
-  --surface: #fffdf8;
-  --ink: #2c2520;
-  --muted: #6f655c;
-  --line: #e2d8c8;
-  --accent: #b65a2c;
-  --accent-ink: #fffaf3;
-  --accent-soft: #f3e2d3;
-  --good: #3f6b4f;
-  --good-soft: #e1ecdf;
-  --danger: #9c2f2f;
-  --bubble-me: #ecdcc8;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --ink: #252525;
+  --muted: #5e5e5e;
+  --line: #dddddd;
+  --accent: #ec5d56; /* brand coral: fills and borders */
+  --accent-ink: #252525; /* text on coral (white on coral is only 3.3:1) */
+  --accent-text: #c23b35; /* coral for text on white (5.3:1) */
+  --accent-soft: #fdebeb;
+  --good: #2f6372;
+  --good-soft: #e3f0f2;
+  --danger: #b3261e;
+  --bubble-me: #fdebeb;
   --radius: 14px;
-  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
-  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --display: 'Lexend Giga', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  --label: 'Lexend Mega', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  --sans: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16130f;
-    --surface: #201c17;
-    --ink: #efe7db;
-    --muted: #a59a8c;
-    --line: #3a332b;
-    --accent: #e08a55;
-    --accent-ink: #1b140e;
-    --accent-soft: #3a281c;
-    --good: #8fc29f;
-    --good-soft: #223026;
-    --danger: #e88a8a;
-    --bubble-me: #3a3026;
+    --bg: #252525;
+    --surface: #2e2e2e;
+    --ink: #f4f4f4;
+    --muted: #b4b4b4;
+    --line: #484848;
+    --accent: #ec5d56;
+    --accent-ink: #252525;
+    --accent-text: #ff8a84;
+    --accent-soft: #3a2a2a;
+    --good: #94dee5;
+    --good-soft: #1f3a40;
+    --danger: #ff8a84;
+    --bubble-me: #3c2f2f;
   }
 }
 
@@ -46,7 +54,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 17px/1.55 var(--sans);
+  font: 17px/1.65 var(--sans);
 }
 
 #app {
@@ -57,19 +65,21 @@ body {
 
 h1,
 h2 {
-  font-family: var(--serif);
-  font-weight: 600;
-  line-height: 1.2;
+  font-family: var(--display);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.2px;
   text-wrap: balance;
   margin: 0;
 }
 
 h1 {
-  font-size: 30px;
+  font-size: 22px;
+  color: var(--accent-text);
 }
 
 h2 {
-  font-size: 20px;
+  font-size: 16px;
 }
 
 p {
@@ -77,17 +87,18 @@ p {
 }
 
 .eyebrow {
-  font-size: 13px;
-  letter-spacing: 0.08em;
+  font-family: var(--label);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
   margin-bottom: 10px;
 }
 
 .lead {
-  font-family: var(--serif);
-  font-size: 19px;
-  line-height: 1.6;
+  font-size: 18px;
+  line-height: 1.65;
 }
 
 .muted {
@@ -158,15 +169,23 @@ a:focus-visible {
 }
 
 button {
-  font: inherit;
-  font-weight: 600;
+  font-family: var(--label);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
   color: var(--ink);
   background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 10px 16px;
-  min-height: 44px;
+  border: 2px solid var(--line);
+  border-radius: 34px;
+  padding: 12px 22px;
+  min-height: 46px;
   cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--ink);
 }
 
 button:disabled {
@@ -180,15 +199,25 @@ button.primary {
   color: var(--accent-ink);
 }
 
+button.primary:hover:not(:disabled) {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
 button.danger {
   color: var(--danger);
 }
 
 button.link {
+  font-family: var(--sans);
+  font-size: inherit;
+  font-weight: 600;
+  letter-spacing: 0;
   border: 0;
   padding: 0;
   min-height: 0;
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
   border-radius: 4px;
 }
@@ -205,7 +234,7 @@ button.block {
   width: 100%;
   border-radius: var(--radius);
   padding: 14px;
-  font-size: 16px;
+  font-size: 13px;
 }
 
 .hands .emoji {
@@ -234,7 +263,6 @@ button.block {
 .shared {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-family: var(--serif);
   font-size: 18px;
 }
 
@@ -299,6 +327,21 @@ button.block {
   margin-bottom: 14px;
 }
 
+.switch,
+.item {
+  font-family: var(--sans);
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.45;
+}
+
+.switch strong {
+  font-family: var(--label);
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
 .switch {
   display: flex;
   align-items: center;
@@ -342,8 +385,8 @@ button.block {
 }
 
 .section-title {
-  font: 600 13px/1 var(--sans);
-  letter-spacing: 0.08em;
+  font: 700 11px/1 var(--label);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
   margin: 24px 0 8px;
@@ -376,6 +419,7 @@ button.block {
 
 .item .what {
   font-weight: 600;
+  font-size: 17px;
 }
 
 .item .when {
@@ -396,7 +440,7 @@ button.block {
   border-radius: 999px;
   padding: 3px 10px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   white-space: nowrap;
 }
 

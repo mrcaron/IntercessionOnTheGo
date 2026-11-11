@@ -12,6 +12,9 @@
     "vapid": "node scripts/gen-vapid.mjs"
   },
   "dependencies": {
+    "@fontsource/hanken-grotesk": "^5.3.0",
+    "@fontsource/lexend-giga": "^5.3.0",
+    "@fontsource/lexend-mega": "^5.3.0",
     "preact": "^11.2.0",
     "uqr": "^0.1.3"
   },
