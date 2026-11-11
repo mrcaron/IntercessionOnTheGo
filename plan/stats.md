@@ -1,6 +1,6 @@
 # Stats plan
 
-**Status:** proposed, nothing built. Branch: `stats`. Written 2026-11-11.
+**Status:** proposed and decided, nothing built. Branch: `stats`. Written 2026-11-11.
 
 ## Goal
 
@@ -28,7 +28,7 @@ Decisions already made:
 - Only anonymous counters are kept: totals, per-day counts and a 24-bucket hour histogram. No page ids, no per-page timestamps, no text, no names.
 - Not exposed to riders: the endpoint requires the intercessor's login.
 - **The rider page says "zero record"**, which stops being strictly true once tallies exist. Change the footer to say the page and everything written on it erase, and that the only thing kept is an anonymous tally with nothing about them. Update the README privacy section too.
-- Settings gets a **Stats on/off** switch and a **Reset stats** button (confirm twice). Off stops counting and deletes the tallies. Default on (open decision below).
+- Settings gets a **Stats on/off** switch and a **Reset stats** button (confirm twice). Off stops counting and deletes the tallies. Default on (see Decisions).
 
 ## How it works
 
@@ -62,12 +62,17 @@ Decisions already made:
 - Off stops counting and deletes tallies; reset clears them; the stats endpoint returns 401 without login.
 - Browser run: after the existing journey, the Stats screen shows the expected numbers and the rider footer shows the new copy.
 
-## Open decisions
+## Decisions
 
-- Stats default on (recommended) or off?
-- Weekly comparison and hour-of-day chart in the first version, or totals and the 14-day chart only?
-- Time zone: take it from the browser automatically (recommended) or ask?
-- Optional later: a "how did it go?" button for riders so "answered" could be real. That is a separate feature.
+Settled by the owner on 2026-11-11:
+
+- **Stats are on by default.** The rider page footer discloses the anonymous tally. The owner can switch stats off or reset them in Settings.
+- **The first version includes everything listed above**, including the week-over-week comparison and the hour-of-day chart, not only totals and the 14-day chart.
+- **Time zone is taken from the browser automatically** at setup and stored on the profile, and stays editable in Settings.
+
+Still open, and not part of this feature:
+
+- A "how did it go?" button for riders, so "answered" could be real. That is a separate feature.
 
 ## Interaction with other plans
 
