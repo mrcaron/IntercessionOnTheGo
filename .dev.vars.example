@@ -1,0 +1,2 @@
+SETUP_TOKEN=dev-setup
+# Add notification keys with: npm run vapid >> .dev.vars

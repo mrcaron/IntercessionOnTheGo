@@ -1,0 +1,26 @@
+{
+  "name": "prayer-station",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build && wrangler dev",
+    "deploy": "vite build && wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json",
+    "test": "vite build && vitest run",
+    "e2e": "vite build && node test/e2e.mjs",
+    "vapid": "node scripts/gen-vapid.mjs"
+  },
+  "dependencies": {
+    "preact": "^11.2.0",
+    "uqr": "^0.1.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
+    "@cloudflare/workers-types": "^4",
+    "typescript": "^5.9.0",
+    "vite": "^8",
+    "vitest": "~4.1.12",
+    "wrangler": "^4.160.1"
+  }
+}

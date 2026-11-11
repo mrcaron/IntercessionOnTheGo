@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "prayer-station",
+  "main": "src/worker/index.ts",
+  // 2026-02-24 or later is required: from then on deleteAll() also removes the alarm.
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "STATION", "class_name": "StationDO" },
+      { "name": "SESSION", "class_name": "SessionDO" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StationDO", "SessionDO"] }],
+  "ratelimits": [
+    // New pages, setup and login attempts, per visitor address.
+    { "name": "CREATE_LIMIT", "namespace_id": "4101", "simple": { "limit": 10, "period": 60 } },
+    // Requests, chat messages and pauses, per visitor address.
+    { "name": "WRITE_LIMIT", "namespace_id": "4102", "simple": { "limit": 60, "period": 60 } }
+  ],
+  // Privacy: keep request logs and traces off.
+  "observability": { "enabled": false }
+}
