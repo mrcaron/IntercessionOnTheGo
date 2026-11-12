@@ -134,6 +134,18 @@ describe('close intake', () => {
     expect((await call(`/api/sessions/${id}/request`, { body: { body: await sealedRequest(page) }, token: page.keys.auth })).status).toBe(200);
   });
 
+  it('tells a rider with the page open that it is closed', async () => {
+    const st = await makeStation();
+    const page = await openPage(st);
+    const id = page.view!.id;
+    expect(((await (await call(`/api/sessions/${id}`, { token: page.keys.auth })).json()) as SessionView).host?.closed).toBe(false);
+    await call('/api/host/intake', { body: { open: false }, cookie: st.cookie });
+    const write = await call(`/api/sessions/${id}/messages`, { body: { body: await sealedMessage(page) }, token: page.keys.auth });
+    expect(write.status).toBe(403);
+    expect(await write.json()).toEqual({ error: 'paused' });
+    expect(((await (await call(`/api/sessions/${id}`, { token: page.keys.auth })).json()) as SessionView).host?.closed).toBe(true);
+  });
+
   it('is also lifted by turning duty on', async () => {
     const st = await makeStation();
     await call('/api/host/intake', { body: { open: false }, cookie: st.cookie });

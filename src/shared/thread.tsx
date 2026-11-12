@@ -81,6 +81,8 @@ export function Chat(props: {
   me: Role;
   placeholder: string;
   onSend(text: string): Promise<void>;
+  /** Show the messages but not the composer (the intercessor has closed the page). */
+  readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -120,19 +122,21 @@ export function Chat(props: {
           <div ref={end} />
         </div>
       )}
-      <div class="composer">
-        <textarea
-          class="grow"
-          aria-label="Message"
-          placeholder={props.placeholder}
-          maxLength={1500}
-          value={draft}
-          onInput={(e) => setDraft(e.currentTarget.value)}
-        />
-        <button class="primary" disabled={busy || !draft.trim()} onClick={send}>
-          Send
-        </button>
-      </div>
+      {!props.readOnly && (
+        <div class="composer">
+          <textarea
+            class="grow"
+            aria-label="Message"
+            placeholder={props.placeholder}
+            maxLength={1500}
+            value={draft}
+            onInput={(e) => setDraft(e.currentTarget.value)}
+          />
+          <button class="primary" disabled={busy || !draft.trim()} onClick={send}>
+            Send
+          </button>
+        </div>
+      )}
       {failed && <p class="error">That didn't send. Check your connection and try again.</p>}
     </div>
   );

@@ -25,7 +25,7 @@ import {
 import '../shared/style.css';
 import { Partners } from '../shared/partners';
 import { applyEvent, Chat, Confirm, useDecrypted, useNow } from '../shared/thread';
-import { QUIET_UNTIL_DUTY, type HostIndex, type SessionEvent, SessionSummary, SessionView, StationEvent } from '../shared/types';
+import { QUIET_UNTIL_DUTY, type HostIndex, type SessionEvent, type SessionSummary, type SessionView, type StationEvent } from '../shared/types';
 import { clearKeys, loadKeys, saveKeys } from './keystore';
 import { useTitles } from './titles';
 
@@ -325,17 +325,15 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
             Quiet my phone for 1 hour
           </button>
         )}
-        {
-          <button
-            onClick={async () => {
-              const res = await api<{ onDutyUntil: number; frozen: boolean }>('host/intake', { body: { open: frozen } });
-              setOnDutyUntil(res.onDutyUntil);
-              setFrozen(res.frozen);
-            }}
-          >
-            {frozen ? 'Reopen' : 'Close intake'}
-          </button>
-        }
+        <button
+          onClick={async () => {
+            const res = await api<{ onDutyUntil: number; frozen: boolean }>('host/intake', { body: { open: frozen } });
+            setOnDutyUntil(res.onDutyUntil);
+            setFrozen(res.frozen);
+          }}
+        >
+          {frozen ? 'Reopen' : 'Close intake'}
+        </button>
       </div>
 
       {!index.pushEnabled && (

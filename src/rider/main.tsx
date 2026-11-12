@@ -229,6 +229,18 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
       if (err instanceof ApiError && err.status === 404) gone();
     });
 
+  // The intercessor can close the page while this one is open. Reload to learn that and show
+  // the calm closed notice instead of a generic failure.
+  const ifOpen = async (write: () => Promise<unknown>) => {
+    try {
+      await write();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'paused') return void (await refresh());
+      throw err;
+    }
+  };
+  const closed = !!view.host?.closed;
+
   useEffect(() => {
     let first = true;
     const socket = live<SessionEvent>(`sessions/${id}/ws`, {
@@ -306,13 +318,15 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
             </p>
           )}
         </section>
-      ) : (
+      ) : closed ? null : (
         <RequestForm
-          onSend={async (content) => {
-            const body = await seal(keys.enc, requestContext(id), JSON.stringify(content));
-            await api(`sessions/${id}/request`, { ...call, body: { body } });
-            await refresh();
-          }}
+          onSend={(content) =>
+            ifOpen(async () => {
+              const body = await seal(keys.enc, requestContext(id), JSON.stringify(content));
+              await api(`sessions/${id}/request`, { ...call, body: { body } });
+              await refresh();
+            })
+          }
         />
       )}
 
@@ -324,13 +338,16 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
             messages={messages}
             me="rider"
             placeholder="Write a message"
-            onSend={async (text) => {
-              const body = await seal(keys.enc, messageContext(id, 'rider'), text);
-              await api(`sessions/${id}/messages`, { ...call, body: { body } });
-              await refresh();
-            }}
+            readOnly={closed}
+            onSend={(text) =>
+              ifOpen(async () => {
+                const body = await seal(keys.enc, messageContext(id, 'rider'), text);
+                await api(`sessions/${id}/messages`, { ...call, body: { body } });
+                await refresh();
+              })
+            }
           />
-        ) : (
+        ) : closed ? null : (
           <button onClick={() => setChatOpen(true)}>💬 Start a chat</button>
         )}
       </section>
@@ -340,14 +357,18 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
           This page erases itself in <strong>{timeLeft(view.expiresAt - now)}</strong>, with zero record.
         </p>
         <div class="row wrap">
-          <button
-            onClick={async () => {
-              const { expiresAt } = await api<{ expiresAt: number }>(`sessions/${id}/pause`, { ...call, method: 'POST' });
-              setView((v) => ({ ...v, expiresAt }));
-            }}
-          >
-            Pause: keep it one more day
-          </button>
+          {!closed && (
+            <button
+              onClick={() =>
+                ifOpen(async () => {
+                  const { expiresAt } = await api<{ expiresAt: number }>(`sessions/${id}/pause`, { ...call, method: 'POST' });
+                  setView((v) => ({ ...v, expiresAt }));
+                })
+              }
+            >
+              Pause: keep it one more day
+            </button>
+          )}
           <Confirm
             label="Erase now"
             confirm="Tap again to erase everything"
