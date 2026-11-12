@@ -181,6 +181,7 @@ try {
 
   // A message that arrives while the intercessor is on the list shows a chat bubble.
   await host.getByRole('button', { name: '← Back' }).click();
+  await rider.waitForTimeout(3100); // riders may send one message every 3 seconds
   await rider.getByLabel('Message').fill('One more thing');
   await rider.getByRole('button', { name: 'Send', exact: true }).click();
   await host.getByLabel('1 unread chat messages').waitFor();

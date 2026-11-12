@@ -3,7 +3,7 @@
 A rider scans the QR code on your hat, lands on a private page, and can share a
 name, a prayer request, or chat with you anonymously. You get a notification,
 pray, and tap 🙏; their page updates at once. Each page erases itself after one
-hour unless the rider presses pause (each press adds 24 hours).
+hour unless the rider presses pause (each press adds 24 hours, at most 3 times and never past 72 hours in all).
 
 ## Demo
 

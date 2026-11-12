@@ -20,7 +20,7 @@ import '../shared/style.css';
 import { Partners } from '../shared/partners';
 import { applyEvent, Chat, Confirm, useDecrypted, useNow } from '../shared/thread';
 import { Toast, useToast } from '../shared/toast';
-import type { SessionEvent, SessionView, StationPublic } from '../shared/types';
+import { HOUR, MAX_PAGE_LIFETIME, MAX_PAUSES, type RiderLimits, type SessionEvent, type SessionView, type StationPublic } from '../shared/types';
 
 type Screen =
   | { kind: 'loading' }
@@ -245,12 +245,15 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
     let first = true;
     const socket = live<SessionEvent>(`sessions/${id}/ws`, {
       token: keys.auth,
-      onEvent: (e) =>
+      onEvent: (e) => {
+        // A host reply frees the rider's chat streak; limits are computed server-side, so refetch them.
+        if (e.t === 'msg' && e.msg.from === 'host') refresh();
         setView((v) => {
           const next = applyEvent(v, e);
           if (!next) queueMicrotask(gone);
           return next ?? v;
-        }),
+        });
+      },
       onUp: () => {
         if (!first) refresh(); // catch up on anything missed while offline
         first = false;
@@ -339,6 +342,8 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
             me="rider"
             placeholder="Write a message"
             readOnly={closed}
+            errorText={limitText}
+            blockedReason={chatBlocked(view.limits)}
             onSend={(text) =>
               ifOpen(async () => {
                 const body = await seal(keys.enc, messageContext(id, 'rider'), text);
@@ -359,12 +364,17 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
         <div class="row wrap">
           {!closed && (
             <button
-              onClick={() =>
-                ifOpen(async () => {
-                  const { expiresAt } = await api<{ expiresAt: number }>(`sessions/${id}/pause`, { ...call, method: 'POST' });
-                  setView((v) => ({ ...v, expiresAt }));
-                })
-              }
+              disabled={view.limits?.pausesLeft === 0}
+              onClick={async () => {
+                try {
+                  await ifOpen(() => api<{ expiresAt: number }>(`sessions/${id}/pause`, { ...call, method: 'POST' }));
+                } catch (err) {
+                  const text = limitText(err);
+                  if (!text) throw err;
+                  show(text);
+                }
+                await refresh();
+              }}
             >
               Pause: keep it one more day
             </button>
@@ -375,6 +385,12 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
             onConfirm={() => api(`sessions/${id}`, { ...call, method: 'DELETE' }).then(gone, gone)}
           />
         </div>
+        {view.limits?.pausesLeft === 0 && (
+          <p class="muted small">
+            No more pauses: a page can be extended at most {MAX_PAUSES} times, and never past {MAX_PAGE_LIFETIME / HOUR} hours in all. Bookmark it to come back
+            before it erases.
+          </p>
+        )}
         <p class="muted small">
           Private: only you and I can see this. What you write is locked on your phone and only mine can open it. It's never shared, sold
           or published. Bookmark this page to come back before it erases.
@@ -384,20 +400,48 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
   );
 }
 
+/** Friendly wording for the per-page rider limits; null for any other error. */
+function limitText(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  switch (err.code) {
+    case 'limit-pause':
+      return `You've used all ${MAX_PAUSES} pauses. This page will erase itself when its time is up.`;
+    case 'limit-chat':
+      return "You've reached the message limit for this page.";
+    case 'wait-for-reply':
+      return "Please wait for a reply before sending more. I'll see what you've written.";
+    case 'too-fast':
+      return 'Easy, give it a few seconds between messages.';
+    case 'limit-request':
+      return "You've already updated your request as many times as this page allows.";
+    case 'already-prayed':
+      return "I've already prayed for you, so this request is closed. Start a chat if you'd like to add something.";
+    default:
+      return null;
+  }
+}
+
+function chatBlocked(limits: RiderLimits | undefined): string | null {
+  if (!limits) return null;
+  if (limits.messagesLeft === 0) return limitText(new ApiError(429, 'limit-chat'));
+  if (limits.streakLeft === 0) return limitText(new ApiError(429, 'wait-for-reply'));
+  return null;
+}
+
 function RequestForm(props: { onSend(content: { name: string; text: string }): Promise<void> }) {
   const [name, setName] = useState('');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const empty = !name.trim() && !text.trim();
 
   const send = async () => {
     setBusy(true);
-    setFailed(false);
+    setFailed(null);
     try {
       await props.onSend({ name: name.trim(), text: text.trim() });
-    } catch {
-      setFailed(true);
+    } catch (err) {
+      setFailed(limitText(err) ?? "That didn't send. Check your connection and try again.");
       setBusy(false);
     }
   };
@@ -422,7 +466,7 @@ function RequestForm(props: { onSend(content: { name: string; text: string }): P
         </span>
         {busy ? 'Sending…' : 'Send it off'}
       </button>
-      {failed && <p class="error">That didn't send. Check your connection and try again.</p>}
+      {failed && <p class="error">{failed}</p>}
     </section>
   );
 }

@@ -81,12 +81,16 @@ export function Chat(props: {
   me: Role;
   placeholder: string;
   onSend(text: string): Promise<void>;
+  /** Friendlier wording for a failed send; the generic message is the fallback. */
+  errorText?(err: unknown): string | null;
+  /** Stops sending and explains why (e.g. a per-page limit was reached). */
+  blockedReason?: string | null;
   /** Show the messages but not the composer (the intercessor has closed the page). */
   readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const count = props.messages.length;
 
@@ -98,12 +102,12 @@ export function Chat(props: {
     const text = draft.trim();
     if (!text || busy) return;
     setBusy(true);
-    setFailed(false);
+    setFailed(null);
     try {
       await props.onSend(text);
       setDraft('');
-    } catch {
-      setFailed(true);
+    } catch (err) {
+      setFailed(props.errorText?.(err) ?? "That didn't send. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -132,12 +136,13 @@ export function Chat(props: {
             value={draft}
             onInput={(e) => setDraft(e.currentTarget.value)}
           />
-          <button class="primary" disabled={busy || !draft.trim()} onClick={send}>
+          <button class="primary" disabled={busy || !draft.trim() || !!props.blockedReason} onClick={send}>
             Send
           </button>
         </div>
       )}
-      {failed && <p class="error">That didn't send. Check your connection and try again.</p>}
+      {!props.readOnly && props.blockedReason && <p class="muted small">{props.blockedReason}</p>}
+      {failed && <p class="error">{failed}</p>}
     </div>
   );
 }

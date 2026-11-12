@@ -5,24 +5,34 @@ import { DurableObject } from 'cloudflare:workers';
 import { b64u, sha256 } from '../shared/crypto';
 import {
   MAX_MESSAGES,
+  MAX_PAGE_LIFETIME,
+  MAX_PAUSES,
+  MAX_REQUEST_EDITS,
+  MAX_RIDER_MESSAGES,
+  MAX_RIDER_STREAK,
+  RIDER_MESSAGE_GAP,
   MAX_SEALED_MESSAGE,
   MAX_SEALED_REQUEST,
   PAUSE_EXTENSION,
   SESSION_LIFETIME,
   type Message,
-  type Refusal,
   type NotifyKind,
+  type RiderLimits,
   type Role,
   type SessionEvent,
   type SessionState,
   type SessionSummary,
   type SessionView,
+  type WriteRefusal,
 } from '../shared/types';
 import type { Env } from './env';
 
+/** `null` still means gone/forbidden/invalid (404); a refusal carries the code the rider sees. */
+export type WriteResult<T = object> = ({ ok: true } & T) | { ok: false; code: WriteRefusal };
+
 export type Auth = { role: 'rider'; token: string } | { role: 'host'; station: string };
 
-interface Meta {
+export interface Meta {
   id: string;
   station: string;
   authHash: string;
@@ -35,7 +45,40 @@ interface Meta {
   requestAt: number | null;
   hasChat: boolean;
   seq: number;
+  // Rider write counters. Optional because pages stored before these caps don't have them.
+  requestWrites?: number;
+  pauses?: number;
+  riderMsgs?: number;
+  riderStreak?: number;
+  lastRiderMsgAt?: number;
 }
+
+type RiderWrite = 'request' | 'pause' | 'message';
+
+/**
+ * The one place rider write caps are decided. Returns the refusal, or null if the write may go ahead.
+ * Rider-only: callers don't ask about host writes.
+ */
+export function riderWriteRefusal(meta: Meta, kind: RiderWrite, now = Date.now()): WriteRefusal | null {
+  switch (kind) {
+    case 'request':
+      // Praying first is allowed (the host can pray for someone who hasn't written), so the rider's
+      // first request still goes through; only a rewrite after prayed is refused.
+      if (meta.state === 'prayed' && requestWrites(meta) >= 1) return 'already-prayed';
+      return requestWrites(meta) >= 1 + MAX_REQUEST_EDITS ? 'limit-request' : null;
+    case 'pause':
+      // A pause that couldn't extend the page any further is refused too.
+      if ((meta.pauses ?? 0) >= MAX_PAUSES || meta.expiresAt >= meta.createdAt + MAX_PAGE_LIFETIME) return 'limit-pause';
+      return null;
+    case 'message':
+      if ((meta.riderMsgs ?? 0) >= MAX_RIDER_MESSAGES) return 'limit-chat';
+      if ((meta.riderStreak ?? 0) >= MAX_RIDER_STREAK) return 'wait-for-reply';
+      if (now - (meta.lastRiderMsgAt ?? 0) < RIDER_MESSAGE_GAP) return 'too-fast';
+      return null;
+  }
+}
+
+const requestWrites = (meta: Meta) => meta.requestWrites ?? (meta.request !== null ? 1 : 0);
 
 const msgKey = (seq: number) => `m:${String(seq).padStart(6, '0')}`;
 
@@ -107,9 +150,8 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   /** Riders cannot write while the intercessor has closed intake. One cheap call to the station. */
-  private async riderWriteRefusal(auth: Auth, meta: Meta): Promise<Refusal | null> {
-    if (auth.role !== 'rider') return null;
-    return (await this.station(meta).isFrozen()) ? { ok: false, code: 'paused' } : null;
+  private async intakeClosed(auth: Auth, meta: Meta): Promise<boolean> {
+    return auth.role === 'rider' && (await this.station(meta).isFrozen());
   }
 
   /** `peek` reads without counting as opening the page, so unread messages stay unread. */
@@ -121,11 +163,13 @@ export class SessionDO extends DurableObject<Env> {
     return this.toView(meta, messages, auth.role);
   }
 
-  async setRequest(auth: Auth, body: string): Promise<boolean | Refusal> {
+  async setRequest(auth: Auth, body: string): Promise<WriteResult | null> {
     const meta = await this.load(auth);
-    if (!meta || auth.role !== 'rider' || !validSealed(body, MAX_SEALED_REQUEST)) return false;
-    const refused = await this.riderWriteRefusal(auth, meta);
-    if (refused) return refused;
+    if (!meta || auth.role !== 'rider' || !validSealed(body, MAX_SEALED_REQUEST)) return null;
+    if (await this.intakeClosed(auth, meta)) return { ok: false, code: 'paused' };
+    const refused = riderWriteRefusal(meta, 'request');
+    if (refused) return { ok: false, code: refused };
+    meta.requestWrites = requestWrites(meta) + 1;
     meta.request = body;
     meta.requestAt = Date.now();
     meta.state = 'requested';
@@ -133,34 +177,45 @@ export class SessionDO extends DurableObject<Env> {
     await this.ctx.storage.put('meta', meta);
     this.broadcast({ t: 'request', request: body, requestAt: meta.requestAt, state: meta.state });
     await this.notify(meta, 'requested');
-    return true;
+    return { ok: true };
   }
 
-  async addMessage(auth: Auth, body: string): Promise<Message | Refusal | null> {
+  async addMessage(auth: Auth, body: string): Promise<WriteResult<{ msg: Message }> | null> {
     const meta = await this.load(auth);
     if (!meta || !validSealed(body, MAX_SEALED_MESSAGE) || meta.seq >= MAX_MESSAGES) return null;
-    const refused = await this.riderWriteRefusal(auth, meta);
-    if (refused) return refused;
+    const now = Date.now();
+    if (await this.intakeClosed(auth, meta)) return { ok: false, code: 'paused' };
+    if (auth.role === 'rider') {
+      const refused = riderWriteRefusal(meta, 'message', now);
+      if (refused) return { ok: false, code: refused };
+      meta.hasChat = true;
+      meta.riderMsgs = (meta.riderMsgs ?? 0) + 1;
+      meta.riderStreak = (meta.riderStreak ?? 0) + 1;
+      meta.lastRiderMsgAt = now;
+    } else {
+      meta.riderStreak = 0; // a host reply lets the rider keep talking
+    }
     meta.seq += 1;
-    const msg: Message = { seq: meta.seq, from: auth.role, ts: Date.now(), body };
-    if (auth.role === 'rider') meta.hasChat = true;
+    const msg: Message = { seq: meta.seq, from: auth.role, ts: now, body };
     await this.ctx.storage.put({ meta, [msgKey(msg.seq)]: msg });
     this.broadcast({ t: 'msg', msg });
     await this.notify(meta, auth.role === 'rider' ? 'message' : 'update');
-    return msg;
+    return { ok: true, msg };
   }
 
-  async pause(auth: Auth): Promise<number | Refusal | null> {
+  async pause(auth: Auth): Promise<WriteResult<{ expiresAt: number }> | null> {
     const meta = await this.load(auth);
     if (!meta || auth.role !== 'rider') return null;
-    const refused = await this.riderWriteRefusal(auth, meta);
-    if (refused) return refused;
-    meta.expiresAt += PAUSE_EXTENSION;
+    if (await this.intakeClosed(auth, meta)) return { ok: false, code: 'paused' };
+    const refused = riderWriteRefusal(meta, 'pause');
+    if (refused) return { ok: false, code: refused };
+    meta.pauses = (meta.pauses ?? 0) + 1;
+    meta.expiresAt = Math.min(meta.expiresAt + PAUSE_EXTENSION, meta.createdAt + MAX_PAGE_LIFETIME);
     await this.ctx.storage.put('meta', meta);
     await this.ctx.storage.setAlarm(meta.expiresAt);
     this.broadcastState(meta);
     await this.notify(meta, 'update');
-    return meta.expiresAt;
+    return { ok: true, expiresAt: meta.expiresAt };
   }
 
   async markPrayed(auth: Auth): Promise<boolean> {
@@ -251,9 +306,19 @@ export class SessionDO extends DurableObject<Env> {
       request: meta.request,
       requestAt: meta.requestAt,
       messages,
-      ...(role === 'host' ? { wrappedKey: meta.wrappedKey } : {}),
+      ...(role === 'host' ? { wrappedKey: meta.wrappedKey } : { limits: riderLimits(meta) }),
     };
   }
+}
+
+function riderLimits(meta: Meta): RiderLimits {
+  const canExtend = meta.expiresAt < meta.createdAt + MAX_PAGE_LIFETIME;
+  return {
+    pausesLeft: canExtend ? Math.max(0, MAX_PAUSES - (meta.pauses ?? 0)) : 0,
+    requestEditsLeft: meta.state === 'prayed' && requestWrites(meta) >= 1 ? 0 : Math.max(0, 1 + MAX_REQUEST_EDITS - requestWrites(meta)),
+    messagesLeft: Math.max(0, MAX_RIDER_MESSAGES - (meta.riderMsgs ?? 0)),
+    streakLeft: Math.max(0, MAX_RIDER_STREAK - (meta.riderStreak ?? 0)),
+  };
 }
 
 function validSealed(body: unknown, max: number): body is string {
