@@ -378,7 +378,7 @@ function RequestForm(props: { onSend(content: { name: string; text: string }): P
   return (
     <section class="card stack">
       <p>
-        I'd love to pray for what's on your heart. Share a need or just your name. Only I can read it. Or say hi in person, or ignore
+        I'd love to pray for you more personally. Share a need or just your name. Only I can read it. Or say hi in person, or ignore
         me; that's fine too.
       </p>
       <div>
