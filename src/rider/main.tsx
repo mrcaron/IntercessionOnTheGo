@@ -175,7 +175,7 @@ function Screens() {
     case 'busy':
       return (
         <Notice title={`Hi, I'm ${screen.name}.`}>
-          <p>I'm with someone right now. Please try again in a minute or two.</p>
+          <p>I'm praying for a few people right now, and I only take on so many at a time so I can give each one my attention. Please try again in a minute or two.</p>
           <button class="primary" onClick={() => location.reload()}>
             Try again
           </button>
