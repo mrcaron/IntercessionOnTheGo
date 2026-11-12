@@ -13,6 +13,13 @@ export const QUIET_MAX_MIN = 24 * 60;
 export const QUIET_UNTIL_DUTY = 8_640_000_000_000_000;
 export const BLOCK_COOLDOWN_MS = 10 * 60 * 1000;
 
+// Station-wide intake budget: how many pages one intercessor will take on, however many
+// addresses the requests come from. Env vars of the same names override these (tests).
+export const MAX_LIVE_PAGES = 20;
+export const MAX_NEW_PAGES_PER_MINUTE = 3;
+export const MAX_PAGES_PER_SHIFT = 40;
+export const RESERVATION_TTL = 30_000; // a reserved slot not claimed by a created page frees itself
+
 // Per-page caps on what a rider can write, so one page can't keep pushing the intercessor for days.
 // Hosts are not limited by these.
 export const MAX_PAGE_LIFETIME = 72 * HOUR; // pauses can never push a page past this, counted from creation

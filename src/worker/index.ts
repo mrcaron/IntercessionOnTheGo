@@ -45,13 +45,17 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
       if (!ID.test(body.station ?? '') || !isBytes(body.authHash, 32) || !isBytes(body.wrappedKey, 125)) throw new HttpError(400);
       const info = await station(env, body.station).publicInfo();
       if (!info) return GONE();
-      if (!info.onDuty) return json({ error: 'off-duty' }, 403);
-      // Temporary until the station intake budget lands: its admit() owns this check and the same 429.
-      const wait = await station(env, body.station).cooldownLeft();
-      if (wait > 0) return json({ error: 'busy' }, 429, { 'Retry-After': String(wait) });
       const newId = b64u(randomBytes(16));
+      // One call checks the station-wide budget and reserves the slot (never pass overrides here).
+      const admitted = await station(env, body.station).admit(newId);
+      if (!admitted.ok) {
+        return admitted.reason === 'off-duty' ? json({ error: 'off-duty' }, 403) : json({ error: 'busy' }, 429, { 'Retry-After': '60' });
+      }
       const view = await session(env, newId).create({ id: newId, ...pick(body) });
-      if (!view) throw new HttpError(500);
+      if (!view) {
+        await station(env, body.station).release(newId);
+        throw new HttpError(500);
+      }
       return json(forRider(view, info), 201);
     }
     case 'GET sessions/:id': {

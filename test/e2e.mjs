@@ -12,7 +12,7 @@ const SHOTS = process.env.SHOTS;
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
 rmSync('.wrangler/state', { recursive: true, force: true });
-const server = spawn('npx', ['wrangler', 'dev', '--port', String(PORT), '--var', 'SETUP_TOKEN:e2e-setup'], {
+const server = spawn('npx', ['wrangler', 'dev', '--port', String(PORT), '--var', 'SETUP_TOKEN:e2e-setup', '--var', 'MAX_NEW_PAGES_PER_MINUTE:1000', '--var', 'MAX_LIVE_PAGES:1000', '--var', 'MAX_PAGES_PER_SHIFT:10000'], {
   stdio: ['ignore', 'pipe', 'pipe'],
   detached: true,
 });
