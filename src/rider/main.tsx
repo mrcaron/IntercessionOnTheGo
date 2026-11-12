@@ -19,6 +19,7 @@ import {
 import '../shared/style.css';
 import { Partners } from '../shared/partners';
 import { applyEvent, Chat, Confirm, useDecrypted, useNow } from '../shared/thread';
+import { Toast, useToast } from '../shared/toast';
 import type { SessionEvent, SessionView, StationPublic } from '../shared/types';
 
 type Screen =
@@ -31,8 +32,33 @@ type Screen =
 
 const remember = (stationId: string) => `mps:${stationId}`;
 
-function forget(pageId: string) {
+// Which prayer the rider has already been told about, per page, so a reload does not announce it again.
+const seenKey = (pageId: string) => `mps-seen:${pageId}`;
+const seenInMemory = new Map<string, string>();
+
+function seenPrayer(pageId: string): string | null {
+  const mem = seenInMemory.get(pageId);
+  if (mem) return mem;
   try {
+    return localStorage.getItem(seenKey(pageId));
+  } catch {
+    return null;
+  }
+}
+
+function markPrayerSeen(pageId: string, prayedAt: number) {
+  seenInMemory.set(pageId, String(prayedAt));
+  try {
+    localStorage.setItem(seenKey(pageId), String(prayedAt));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+function forget(pageId: string) {
+  seenInMemory.delete(pageId);
+  try {
+    localStorage.removeItem(seenKey(pageId));
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i)!;
       if (key.startsWith('mps:') && localStorage.getItem(key)?.startsWith(`${pageId}#`)) localStorage.removeItem(key);
@@ -226,11 +252,22 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
     if (now >= view.expiresAt) refresh();
   }, [now, view.expiresAt]);
 
+  // Tell the rider the moment they have been prayed for, wherever they have scrolled to.
+  // A prayer is announced once: live when it happens, or once on return if it happened while they were away.
+  const { toast, show, dismiss } = useToast();
+  useEffect(() => {
+    if (view.state !== 'prayed' || !view.prayedAt) return;
+    if (seenPrayer(id) === String(view.prayedAt)) return;
+    markPrayerSeen(id, view.prayedAt);
+    show(`I prayed for you at ${clock(view.prayedAt)}.`);
+  }, [id, view.state, view.prayedAt]);
+
   const host = view.host ?? { name: 'a friend', place: 'near you' };
   const [chatOpen, setChatOpen] = useState(false);
 
   return (
     <main>
+      <Toast toast={toast} onDismiss={dismiss} />
       <p class="eyebrow">Mobile Prayer Station</p>
       <h1>Hi there, I'm {host.name}.</h1>
       <div class="lead" style="margin-top:16px">

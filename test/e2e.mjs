@@ -139,15 +139,31 @@ try {
   step('rider sends a request; dashboard marks it new');
 
   // --- intercessor reads and prays -------------------------------------------
+  // The rider scrolls to the very bottom (the footer logos), far from the banner at the top.
+  await rider.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  if ((await rider.evaluate(() => window.scrollY)) < 200) throw new Error('the rider page did not scroll, so the toast check would prove nothing');
   await host.getByText('New request').click();
   await host.getByText(SECRET).waitFor();
   await host.getByRole('heading', { name: 'Dana' }).waitFor();
   await shot(host, '07-dash-detail');
   await host.getByRole('button', { name: "I've prayed for this" }).click();
   await host.getByText('They can see this on their page').waitFor();
-  await rider.getByText('I prayed for you at').waitFor();
+  const toast = rider.locator('.toast');
+  await toast.getByText('I prayed for you at').waitFor();
+  // Wait for the slide-in to finish, then require the whole toast to be on screen.
+  await rider.waitForFunction(() => {
+    const r = document.querySelector('.toast')?.getBoundingClientRect();
+    return !!r && r.top >= 0 && r.bottom <= window.innerHeight && r.width > 0;
+  });
+  const bannerOffScreen = await rider.locator('.banner').evaluate((el) => el.getBoundingClientRect().bottom < 0);
+  if (!bannerOffScreen) throw new Error('the inline banner is on screen, so the toast check would prove nothing');
+  if (SHOTS) await rider.screenshot({ path: `${SHOTS}/08b-rider-toast.png` });
+  await rider.getByRole('button', { name: 'Dismiss notification' }).click();
+  await toast.waitFor({ state: 'hidden' });
+  await rider.locator('.banner').getByText('I prayed for you at').waitFor();
+  await rider.evaluate(() => window.scrollTo(0, 0));
   await shot(rider, '08-rider-prayed');
-  step('intercessor decrypts, prays, and the rider sees it without reloading');
+  step('intercessor decrypts and prays; the rider sees a toast wherever they have scrolled, and the banner stays');
 
   // --- chat -------------------------------------------------------------------
   await rider.getByRole('button', { name: 'Start a chat' }).click();
@@ -176,7 +192,8 @@ try {
   await rider.goto(pageUrl);
   await rider.getByText(SECRET).waitFor();
   await rider.getByText('Of course. I am right here.').waitFor();
-  step('pause adds a day; the bookmarked address reopens the page');
+  if ((await rider.locator('.toast').count()) !== 0) throw new Error('the prayer was announced again after a reload');
+  step('pause adds a day; the bookmarked address reopens the page without repeating the toast');
 
   // Scanning the hat again returns to the same page instead of starting another.
   await rider.goto('about:blank');
@@ -184,6 +201,20 @@ try {
   await rider.getByText(SECRET).waitFor();
   if (rider.url() !== pageUrl) throw new Error('second scan opened a different page');
   step('scanning again returns to the same page');
+
+  // A prayer that happened while the rider was away is announced once on return, then goes away by itself.
+  const pageId = pageUrl.match(/\/p\/([^#]+)/)[1];
+  await rider.evaluate((key) => localStorage.removeItem(key), `mps-seen:${pageId}`);
+  await rider.mouse.move(5, 600); // keep the pointer off the toast: hovering holds it open
+  await rider.goto('about:blank');
+  await rider.goto(pageUrl);
+  await rider.locator('.toast').getByText('I prayed for you at').waitFor();
+  await rider.locator('.toast').waitFor({ state: 'hidden', timeout: 18000 });
+  await rider.reload();
+  await rider.getByText(SECRET).waitFor();
+  await rider.waitForTimeout(500);
+  if ((await rider.locator('.toast').count()) !== 0) throw new Error('the toast came back after it had been seen');
+  step('on return the toast appears once, disappears by itself after about 15 seconds, and does not come back');
 
   // --- privacy ----------------------------------------------------------------
   const code = link.split('#k=')[1];
