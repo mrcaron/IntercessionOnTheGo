@@ -162,6 +162,18 @@ describe('push throttling', () => {
     expect(t.sent[1].payload.body).toBe('Test: notifications are working.');
   });
 
+  it('starts a fresh window when the old one is stale (lost alarm)', async () => {
+    const t = await setup();
+    await runInDurableObject(t.stub, async (_inst: StationDO, state) => {
+      await state.storage.put('pushWindow', { end: Date.now() - 10 * PUSH_WINDOW_MS, requested: 5, message: 0 });
+    });
+    await t.event('a', 'requested');
+    await t.flushWaitUntil();
+    expect(t.sent).toHaveLength(1);
+    expect(t.sent[0].urgency).toBe('high');
+    expect(await runDurableObjectAlarm(t.stub)).toBe(true);
+  });
+
   it('an alarm cannot throw or loop when sending fails', async () => {
     const t = await setup();
     await t.event('a', 'requested');

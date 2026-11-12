@@ -199,7 +199,9 @@ export class StationDO extends DurableObject<Env> {
   private async notePush(kind: 'requested' | 'message'): Promise<void> {
     if (this.dashboardVisible() || (await this.quiet())) return;
     const w = await this.ctx.storage.get<PushWindow>('pushWindow');
-    if (w) {
+    // A window whose alarm was lost (e.g. a deploy reset it) must not swallow alerts forever.
+    const stale = !!w && w.end + this.windowMs() < Date.now();
+    if (w && !stale) {
       w[kind]++;
       await this.ctx.storage.put('pushWindow', w);
       return;
@@ -222,6 +224,7 @@ export class StationDO extends DurableObject<Env> {
       const end = Date.now() + this.windowMs();
       await this.ctx.storage.put('pushWindow', { end, requested: 0, message: 0 } satisfies PushWindow);
       await this.ctx.storage.setAlarm(end);
+      // Counts are intentionally discarded while quiet or while the dashboard is open.
       if (this.dashboardVisible() || (await this.quiet())) return;
       await this.push(mergedText(w.requested, w.message), 'normal', false);
     } catch {
