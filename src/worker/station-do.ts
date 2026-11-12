@@ -33,6 +33,8 @@ export interface IntakeLimits {
   perShift: number;
 }
 
+export type AdmitResult = { ok: true } | { ok: false; reason: 'off-duty' | 'busy' };
+
 const num = (v: string | undefined, fallback: number) => (v !== undefined && Number.isFinite(+v) && +v >= 0 ? +v : fallback);
 
 const LOGIN_TTL = 30 * 24 * 60 * 60 * 1000;
@@ -147,13 +149,28 @@ export class StationDO extends DurableObject<Env> {
    * Durable Object are serialized, so two creates at once cannot both take the last slot.
    * `overrides` is for tests only; the Worker route never passes it.
    */
-  async admit(id: string, overrides?: Partial<IntakeLimits>): Promise<{ ok: true } | { ok: false; reason: 'off-duty' | 'busy' }> {
+  async admit(id: string, overrides?: Partial<IntakeLimits>): Promise<AdmitResult> {
+    // Queue behind earlier calls: awaiting storage between the check and the write must not let
+    // another admit read the same counts.
+    const run = this.admitting.then(() => this.admitNow(id, overrides));
+    this.admitting = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private admitting: Promise<void> = Promise.resolve();
+
+  private async admitNow(id: string, overrides?: Partial<IntakeLimits>): Promise<AdmitResult> {
     if (!(await this.onDuty())) return { ok: false, reason: 'off-duty' };
     const now = Date.now();
     const limits: IntakeLimits = {
       livePages: num(this.env.MAX_LIVE_PAGES, MAX_LIVE_PAGES),
       perMinute: num(this.env.MAX_NEW_PAGES_PER_MINUTE, MAX_NEW_PAGES_PER_MINUTE),
       perShift: num(this.env.MAX_PAGES_PER_SHIFT, MAX_PAGES_PER_SHIFT),
+      // Test-only: nothing in the Worker writes this key. It survives the instance being recreated.
+      ...(await this.ctx.storage.get<Partial<IntakeLimits>>('intakeLimits')),
       ...overrides,
     };
     if (((await this.ctx.storage.get<number>('cooldownUntil')) ?? 0) > now) return { ok: false, reason: 'busy' };
@@ -210,7 +227,7 @@ export class StationDO extends DurableObject<Env> {
 
   async sessionEvent(summary: Omit<SessionSummary, 'unread'>, kind: NotifyKind): Promise<void> {
     const key = `s:${summary.id}`;
-    await this.ctx.storage.delete(`r:${summary.id}`); // the page now counts through the index
+    if (kind === 'opened') await this.ctx.storage.delete(`r:${summary.id}`); // the page now counts through the index
     const prev = await this.ctx.storage.get<SessionSummary>(key);
     const session: SessionSummary = { ...summary, unread: (prev?.unread ?? 0) + (kind === 'message' ? 1 : 0) };
     await this.ctx.storage.put(key, session);

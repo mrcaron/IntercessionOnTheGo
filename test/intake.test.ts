@@ -38,15 +38,14 @@ async function makeStation(limits: { live?: number; perMinute?: number; perShift
   });
   const cookie = login.headers.get('set-cookie')!.split(';')[0];
   const stub = testEnv.STATION.get(testEnv.STATION.idFromName(id));
-  await runInDurableObject(stub, (inst: StationDO) => {
-    const self = inst as unknown as { env: Env };
-    self.env = {
-      ...self.env,
-      MAX_LIVE_PAGES: String(limits.live ?? MAX_LIVE_PAGES),
-      MAX_NEW_PAGES_PER_MINUTE: String(limits.perMinute ?? MAX_NEW_PAGES_PER_MINUTE),
-      MAX_PAGES_PER_SHIFT: String(limits.perShift ?? MAX_PAGES_PER_SHIFT),
-    };
-  });
+  // Kept in storage, not instance memory, so it survives the Durable Object being recreated.
+  await runInDurableObject(stub, (_, state) =>
+    state.storage.put('intakeLimits', {
+      livePages: limits.live ?? MAX_LIVE_PAGES,
+      perMinute: limits.perMinute ?? MAX_NEW_PAGES_PER_MINUTE,
+      perShift: limits.perShift ?? MAX_PAGES_PER_SHIFT,
+    }),
+  );
   const duty = (on: boolean) => call('/api/host/duty', { body: { on }, cookie });
   expect((await duty(true)).status).toBe(200);
   return { keys, code, id, cookie, stub, duty };
