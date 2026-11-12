@@ -1,8 +1,9 @@
 import { env, runInDurableObject, SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import * as c from '../src/shared/crypto';
-import { QUIET_UNTIL_DUTY, type HostIndex, type SessionView } from '../src/shared/types';
+import { QUIET_UNTIL_DUTY, type HostIndex, type SessionSummary, type SessionView } from '../src/shared/types';
 import type { Env } from '../src/worker/env';
+import type { StationDO } from '../src/worker/station-do';
 
 const testEnv = env as unknown as Env;
 const ORIGIN = 'https://prayer.test';
@@ -237,5 +238,51 @@ describe('only the intercessor can use the controls', () => {
     const st = await makeStation();
     const res = await SELF.fetch(`${ORIGIN}/api/host/panic`, { method: 'POST', headers: { Origin: 'https://evil.test', Cookie: st.cookie }, body: '{}' });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('quiet mode and the push path together', () => {
+  // A station whose push sender is replaced by a counter, driven directly so events are exact.
+  async function pushStation(name: string) {
+    const stub = testEnv.STATION.get(testEnv.STATION.idFromName(name));
+    const sent: string[] = [];
+    await runInDurableObject(stub, async (inst: StationDO) => {
+      (inst as unknown as { env: Partial<Env> }).env = { VAPID_PUBLIC_KEY: 'pub', VAPID_PRIVATE_KEY: 'priv' };
+      inst.sender = async (_s, payload) => {
+        sent.push(payload);
+        return 201;
+      };
+      await inst.addPush({ endpoint: 'https://push.example/abc', keys: { p256dh: c.b64u(new Uint8Array(65).fill(4)), auth: c.b64u(new Uint8Array(16).fill(1)) } }, 'https://prayer.test');
+    });
+    const summary = (id: string): Omit<SessionSummary, 'unread'> => ({
+      id, createdAt: 1, expiresAt: Date.now() + 1e6, state: 'requested', prayedAt: null, hasRequest: true, hasChat: true,
+    });
+    const event = (id: string) => runInDurableObject(stub, (inst: StationDO) => inst.sessionEvent(summary(id), 'requested'));
+    const settle = () => new Promise((r) => setTimeout(r, 20));
+    return { stub, sent, event, settle };
+  }
+
+  it('sends nothing after panic, and resumes once duty is turned on', async () => {
+    const t = await pushStation('controls-panic');
+    await runInDurableObject(t.stub, (inst: StationDO) => inst.lockDown());
+    await t.event('a');
+    await t.settle();
+    expect(t.sent).toHaveLength(0);
+    await runInDurableObject(t.stub, (inst: StationDO) => inst.setDuty(true));
+    await t.event('b');
+    await t.settle();
+    expect(t.sent).toHaveLength(1);
+  });
+
+  it('sends nothing while a timed quiet is on, and resumes when it is turned off', async () => {
+    const t = await pushStation('controls-quiet');
+    await runInDurableObject(t.stub, (inst: StationDO) => inst.setQuiet(60));
+    await t.event('a');
+    await t.settle();
+    expect(t.sent).toHaveLength(0);
+    await runInDurableObject(t.stub, (inst: StationDO) => inst.setQuiet(0));
+    await t.event('b');
+    await t.settle();
+    expect(t.sent).toHaveLength(1);
   });
 });
