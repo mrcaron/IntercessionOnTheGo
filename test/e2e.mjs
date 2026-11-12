@@ -140,6 +140,8 @@ try {
 
   // --- intercessor reads and prays -------------------------------------------
   // The rider scrolls to the very bottom (the footer logos), far from the banner at the top.
+  // A short window makes sure the page is long enough to scroll however much text it has.
+  await rider.setViewportSize({ width: 390, height: 520 });
   await rider.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   if ((await rider.evaluate(() => window.scrollY)) < 200) throw new Error('the rider page did not scroll, so the toast check would prove nothing');
   await host.getByText('New request').click();
@@ -161,6 +163,7 @@ try {
   await rider.getByRole('button', { name: 'Dismiss notification' }).click();
   await toast.waitFor({ state: 'hidden' });
   await rider.locator('.banner').getByText('I prayed for you at').waitFor();
+  await rider.setViewportSize({ width: 390, height: 844 });
   await rider.evaluate(() => window.scrollTo(0, 0));
   await shot(rider, '08-rider-prayed');
   step('intercessor decrypts and prays; the rider sees a toast wherever they have scrolled, and the banner stays');

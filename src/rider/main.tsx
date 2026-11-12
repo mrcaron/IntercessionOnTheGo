@@ -166,7 +166,7 @@ function Screens() {
     case 'offduty':
       return (
         <Notice title={`Hi, I'm ${screen.name}.`}>
-          <p>I'm not out praying right now, so this page isn't taking requests at the moment. If you see me again, scan the hat and say hello.</p>
+          <p>I'm not out praying right now, so this page isn't open. If you see me again, scan the hat and say hello.</p>
           <p>God sees you and loves you deeply.</p>
         </Notice>
       );
@@ -272,8 +272,8 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
       <h1>Hi there, I'm {host.name}.</h1>
       <div class="lead" style="margin-top:16px">
         <p>
-          I am an apprentice of Jesus praying over you right now {host.place}. I want you to know that God sees you and loves you
-          deeply, in the midst of the joys and sorrows you are carrying. The sign is that you saw me and got here.
+          I'm an apprentice of Jesus, praying over you right now {host.place}. God sees you and loves you deeply, in the joys and
+          sorrows you carry. The sign is that you saw me and got here.
         </p>
       </div>
 
@@ -296,7 +296,7 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
           {request?.text && <p class="shared">{request.text}</p>}
           {view.state === 'requested' && (
             <p class="muted small" role="status">
-              Sent. Keep this page open or come back to it, and you'll see here the moment I've prayed for you.
+              Sent. Keep this page open, or come back to it: you'll see here when I've prayed for you.
             </p>
           )}
         </section>
@@ -312,7 +312,7 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
 
       <section class="card stack">
         <h2>Chat with me</h2>
-        <p class="muted small">Anonymous, and not attached to any phone number.</p>
+        <p class="muted small">Anonymous. No phone number needed.</p>
         {chatOpen || messages.length > 0 ? (
           <Chat
             messages={messages}
@@ -349,9 +349,8 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
           />
         </div>
         <p class="muted small">
-          This is confidential and will not be shared with anyone else, sold or otherwise published anywhere. Only you and I can see this
-          space: what you write is locked on your phone and only my phone can open it. You can bookmark this page and come back any
-          time before it erases.
+          Private: only you and I can see this. What you write is locked on your phone and only mine can open it. It's never shared, sold
+          or published. Bookmark this page to come back before it erases.
         </p>
       </section>
     </main>
@@ -379,9 +378,8 @@ function RequestForm(props: { onSend(content: { name: string; text: string }): P
   return (
     <section class="card stack">
       <p>
-        I would love to pray more specifically for your needs as you feel open to sharing them. Feel free to ignore me, or introduce
-        yourself personally if you're comfortable. If you'd like to remain discreet, tell me below how to pray for you, or merely share
-        your name.
+        I'd love to pray for what's on your heart. Share a need or just your name. Only I can read it. Or say hi in person, or ignore
+        me; that's fine too.
       </p>
       <div>
         <label for="name">Your name (optional)</label>
