@@ -27,6 +27,7 @@ import { Partners } from '../shared/partners';
 import { applyEvent, Chat, Confirm, useDecrypted, useNow } from '../shared/thread';
 import type { HostIndex, SessionEvent, SessionSummary, SessionView, StationEvent } from '../shared/types';
 import { clearKeys, loadKeys, saveKeys } from './keystore';
+import { useTitles } from './titles';
 
 type Index = HostIndex & { pushKey: string | null };
 
@@ -225,6 +226,7 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
   const [onDutyUntil, setOnDutyUntil] = useState(index.onDutyUntil);
   const [view, setView] = useState<{ kind: 'list' } | { kind: 'settings' } | { kind: 'detail'; id: string }>({ kind: 'list' });
   const now = useNow();
+  const titleOf = useTitles(me.keys, sessions);
 
   useEffect(() => {
     let first = true;
@@ -262,7 +264,7 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
     return <Settings me={me} index={index} setIndex={props.setIndex} onBack={() => setView({ kind: 'list' })} />;
   }
   if (view.kind === 'detail') {
-    return <Detail me={me} id={view.id} onBack={() => setView({ kind: 'list' })} />;
+    return <Detail me={me} id={view.id} title={titleOf(sessions.find((s) => s.id === view.id))} onBack={() => setView({ kind: 'list' })} />;
   }
 
   const waiting = alive.filter((s) => s.state !== 'prayed' || s.unread > 0);
@@ -312,7 +314,7 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
       ) : (
         <ul class="list">
           {waiting.map((s) => (
-            <Item key={s.id} s={s} now={now} onOpen={() => setView({ kind: 'detail', id: s.id })} />
+            <Item key={s.id} s={s} title={titleOf(s)} now={now} onOpen={() => setView({ kind: 'detail', id: s.id })} />
           ))}
         </ul>
       )}
@@ -322,7 +324,7 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
           <h2 class="section-title">Prayed for ({done.length})</h2>
           <ul class="list">
             {done.map((s) => (
-              <Item key={s.id} s={s} now={now} onOpen={() => setView({ kind: 'detail', id: s.id })} />
+              <Item key={s.id} s={s} title={titleOf(s)} now={now} onOpen={() => setView({ kind: 'detail', id: s.id })} />
             ))}
           </ul>
         </>
@@ -331,18 +333,24 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
   );
 }
 
-function Item(props: { s: SessionSummary; now: number; onOpen(): void }) {
+function Item(props: { s: SessionSummary; title: string; now: number; onOpen(): void }) {
   const { s, now } = props;
   const left = s.expiresAt - now;
-  const label = s.state === 'prayed' ? 'Prayed' : s.state === 'requested' ? 'New request' : 'Opened your page';
+  const status =
+    s.state === 'prayed'
+      ? s.prayedAt
+        ? `Prayed at ${clock(s.prayedAt)}`
+        : 'Prayed'
+      : s.state === 'requested'
+        ? 'New request'
+        : `Opened at ${clock(s.createdAt)}`;
   return (
     <li>
       <button class={`item ${s.state === 'requested' || s.unread > 0 ? 'urgent' : ''}`} onClick={props.onOpen}>
         <span class="grow">
-          <span class="what">{label}</span>
+          <span class="what">{props.title}</span>
           <span class="when" style="display:block">
-            {s.state === 'prayed' && s.prayedAt ? `at ${clock(s.prayedAt)} · ` : `since ${clock(s.createdAt)} · `}
-            <span class={left < 15 * 60000 ? 'when soon' : ''}>erases in {timeLeft(left)}</span>
+            {status} · <span class={left < 15 * 60000 ? 'when soon' : ''}>erases in {timeLeft(left)}</span>
           </span>
         </span>
         {s.hasChat && (
@@ -360,7 +368,7 @@ function Item(props: { s: SessionSummary; now: number; onOpen(): void }) {
 
 // ---------------------------------------------------------------------------
 
-function Detail(props: { me: Identity; id: string; onBack(): void }) {
+function Detail(props: { me: Identity; id: string; title: string; onBack(): void }) {
   const { me, id } = props;
   const [view, setView] = useState<SessionView | null>(null);
   const [keys, setKeys] = useState<SessionKeys | null>(null);
@@ -427,11 +435,11 @@ function Detail(props: { me: Identity; id: string; onBack(): void }) {
         <>
           <section class="card stack">
             <p class="eyebrow" style="margin:0">
-              {view.request ? `Shared at ${clock(view.requestAt ?? view.createdAt)}` : `Opened your page at ${clock(view.createdAt)}`}
+              {view.request ? `Shared at ${clock(view.requestAt ?? view.createdAt)}` : `Opened at ${clock(view.createdAt)}`}
             </p>
+            <h2>{props.title}</h2>
             {view.request ? (
               <>
-                {request?.name && <h2>{request.name}</h2>}
                 {request?.text ? <p class="shared">{request.text}</p> : request && <p class="muted">Shared a name only.</p>}
                 {!request && <p class="muted">Unlocking…</p>}
               </>

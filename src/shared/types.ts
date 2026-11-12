@@ -19,6 +19,7 @@ export interface SessionSummary {
   expiresAt: number;
   state: SessionState;
   prayedAt: number | null;
+  hasRequest: boolean;
   hasChat: boolean;
   unread: number;
 }

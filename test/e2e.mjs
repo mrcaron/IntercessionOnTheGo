@@ -184,6 +184,66 @@ try {
   await shot(host, '10-dash-chat-bubble');
   step('dashboard shows a chat bubble with the unread count');
 
+  // --- names in the list --------------------------------------------------------
+  const titles = async () => host.locator('.item .what').allInnerTexts();
+  if ((await titles()).join('|') !== 'Dana') throw new Error(`expected the row to be titled with the rider's name, got: ${(await titles()).join('|')}`);
+  await shot(host, '10b-dash-named-row');
+
+  const openAnonymous = async (text) => {
+    const ctx = await browser.newContext(phone);
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => errors.push(`anonymous rider: ${e.message}`));
+    await page.goto(link);
+    await page.getByLabel('How can I pray for you? (optional)').fill(text);
+    await page.getByRole('button', { name: 'Send it off' }).click();
+    await page.getByText('Sent. Keep this page open').waitFor();
+    return page;
+  };
+  const eraseFromRider = async (page) => {
+    await page.getByRole('button', { name: 'Erase now' }).click();
+    await page.getByRole('button', { name: 'Tap again to erase everything' }).click();
+    await page.getByRole('heading', { name: 'Nothing is here.' }).waitFor();
+  };
+  const row = (title) => host.locator('.item', { has: host.locator('.what', { hasText: new RegExp(`^${title}$`) }) });
+
+  // Riders who give no name become "Anonymous 1", "Anonymous 2", ...
+  const anon1 = await openAnonymous('Please pray for my family');
+  await row('Anonymous 1').waitFor();
+  const anon2 = await openAnonymous('Please pray for my health');
+  await row('Anonymous 2').waitFor();
+  await shot(host, '10c-dash-anonymous-rows');
+
+  // A chat message on an anonymous page is unread, and looking up names must not mark it read.
+  await anon1.getByRole('button', { name: 'Start a chat' }).click();
+  await anon1.getByLabel('Message').fill('Hello from a stranger');
+  await anon1.getByRole('button', { name: 'Send', exact: true }).click();
+  await row('Anonymous 1').getByLabel('1 unread chat messages').waitFor();
+  await host.reload();
+  await row('Anonymous 1').getByLabel('1 unread chat messages').waitFor();
+  await row('Dana').waitFor();
+  await row('Anonymous 2').waitFor();
+  if ((await titles()).length !== 3) throw new Error(`expected three rows after a reload, got: ${(await titles()).join('|')}`);
+
+  // Numbers are never reused: after Anonymous 1 erases, the next newcomer is Anonymous 3.
+  await eraseFromRider(anon1);
+  await host.getByText('Anonymous 1').waitFor({ state: 'detached' });
+  const anon3 = await openAnonymous('Please pray for my job');
+  await row('Anonymous 3').waitFor();
+  const detailTitles = await titles();
+  if (!detailTitles.includes('Anonymous 2') || detailTitles.includes('Anonymous 1')) throw new Error(`unexpected rows: ${detailTitles.join('|')}`);
+
+  // The detail view carries the same title.
+  await row('Anonymous 3').click();
+  await host.getByRole('heading', { name: 'Anonymous 3' }).waitFor();
+  await host.getByText('Please pray for my job').waitFor();
+  await host.getByRole('button', { name: '← Back' }).click();
+
+  await eraseFromRider(anon2);
+  await eraseFromRider(anon3);
+  await host.getByText('Anonymous 2').waitFor({ state: 'detached' });
+  await host.getByText('Anonymous 3').waitFor({ state: 'detached' });
+  step('list rows are titled with the rider\'s name, or "Anonymous N" with numbers that only go up and survive a reload');
+
   // --- pause and bookmark -------------------------------------------------------
   await rider.getByRole('button', { name: /Pause/ }).click();
   await rider.getByText(/erases itself in 2[45] h/).waitFor();

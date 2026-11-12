@@ -105,11 +105,12 @@ export class SessionDO extends DurableObject<Env> {
     return b64u(await sha256(auth.token)) === meta.authHash ? meta : null;
   }
 
-  async view(auth: Auth): Promise<SessionView | null> {
+  /** `peek` reads without counting as opening the page, so unread messages stay unread. */
+  async view(auth: Auth, peek = false): Promise<SessionView | null> {
     const meta = await this.load(auth);
     if (!meta) return null;
     const messages = [...(await this.ctx.storage.list<Message>({ prefix: 'm:' })).values()];
-    if (auth.role === 'host') await this.station(meta).markRead(meta.id);
+    if (auth.role === 'host' && !peek) await this.station(meta).markRead(meta.id);
     return this.toView(meta, messages, auth.role);
   }
 
@@ -220,6 +221,7 @@ export class SessionDO extends DurableObject<Env> {
       expiresAt: meta.expiresAt,
       state: meta.state,
       prayedAt: meta.prayedAt,
+      hasRequest: meta.request !== null,
       hasChat: meta.hasChat,
     };
     await this.station(meta).sessionEvent(summary, kind);

@@ -53,7 +53,8 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
     }
     case 'GET sessions/:id': {
       const auth = await sessionAuth(request, env);
-      const view = auth && (await session(env, id).view(auth));
+      // The dashboard can peek (read without marking chat messages as read) to learn a name for the list.
+      const view = auth && (await session(env, id).view(auth, url.searchParams.get('peek') === '1'));
       if (!view) return GONE();
       return json(auth.role === 'rider' ? forRider(view, await station(env, view.station).publicInfo()) : view);
     }

@@ -173,6 +173,35 @@ describe('prayer page', () => {
     expect(new Set(bodies).size).toBe(1);
   });
 
+  it('tells the dashboard whether a request exists, and lets it peek without marking chat as read', async () => {
+    const station = await makeStation();
+    const page = await openPage(station);
+    const id = page.view!.id;
+    expect((await hostIndex(station.cookie)).sessions[0].hasRequest).toBe(false);
+
+    const sealed = await c.seal(page.keys.enc, c.requestContext(id), JSON.stringify({ name: '', text: 'x' }));
+    await call(`/api/sessions/${id}/request`, { body: { body: sealed }, token: page.keys.auth });
+    expect((await hostIndex(station.cookie)).sessions[0].hasRequest).toBe(true);
+
+    const hello = await c.seal(page.keys.enc, c.messageContext(id, 'rider'), 'Hello');
+    await call(`/api/sessions/${id}/messages`, { body: { body: hello }, token: page.keys.auth });
+    expect((await hostIndex(station.cookie)).sessions[0].unread).toBe(1);
+
+    // Peeking returns the page (with the key to read it) but leaves the message unread.
+    const peeked = (await (await call(`/api/sessions/${id}?peek=1`, { cookie: station.cookie })).json()) as SessionView;
+    expect(peeked.wrappedKey).toBeTruthy();
+    expect(peeked.request).toBeTruthy();
+    expect((await hostIndex(station.cookie)).sessions[0].unread).toBe(1);
+
+    // Opening it for real marks it read.
+    await call(`/api/sessions/${id}`, { cookie: station.cookie });
+    expect((await hostIndex(station.cookie)).sessions[0].unread).toBe(0);
+
+    // A rider cannot use peek to learn anything extra.
+    const asRider = (await (await call(`/api/sessions/${id}?peek=1`, { token: page.keys.auth })).json()) as SessionView;
+    expect(asRider.wrappedKey).toBeUndefined();
+  });
+
   it('pause adds exactly 24 hours each press', async () => {
     const station = await makeStation();
     const page = await openPage(station);
