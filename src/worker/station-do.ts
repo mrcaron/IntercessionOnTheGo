@@ -9,6 +9,8 @@ import {
   MAX_LIVE_PAGES,
   MAX_NEW_PAGES_PER_MINUTE,
   MAX_PAGES_PER_SHIFT,
+  QUIET_MAX_MIN,
+  QUIET_UNTIL_DUTY,
   RESERVATION_TTL,
   type HostIndex,
   type NotifyKind,
@@ -81,7 +83,7 @@ export class StationDO extends DurableObject<Env> {
   async publicInfo(): Promise<StationPublic | null> {
     const p = await this.ctx.storage.get<Profile>('profile');
     if (!p) return null;
-    return { name: p.name, place: p.place, onDuty: await this.onDuty() };
+    return { name: p.name, place: p.place, onDuty: await this.onDuty(), closed: await this.isFrozen() };
   }
 
   async updateProfile(name: string, place: string): Promise<void> {
@@ -138,6 +140,7 @@ export class StationDO extends DurableObject<Env> {
     const until = on ? Date.now() + DUTY_LENGTH : 0;
     await this.ctx.storage.put('duty', until);
     if (on) await this.ctx.storage.put('shiftCount', 0); // a new shift gets a fresh page budget
+    if (on) await this.clearControlsOnDuty();
     this.broadcast({ t: 'duty', onDutyUntil: until });
     return until;
   }
@@ -210,6 +213,53 @@ export class StationDO extends DurableObject<Env> {
     return n;
   }
 
+  // -- host controls: quiet mode, closed intake, cool-down ---------------------
+  // Plain timestamps and flags; nothing here schedules work. The push path reads quietUntil.
+
+  async isFrozen(): Promise<boolean> {
+    return (await this.ctx.storage.get<boolean>('frozen')) === true;
+  }
+
+  /** Going back on duty reopens pages, and ends a panic's "quiet until duty" (a timed quiet stays). */
+  private async clearControlsOnDuty(): Promise<void> {
+    await this.ctx.storage.delete('frozen');
+    if ((await this.ctx.storage.get<number>('quietUntil')) === QUIET_UNTIL_DUTY) await this.ctx.storage.delete('quietUntil');
+    await this.broadcastControls();
+  }
+
+  /** `minutes` of 0 turns quiet mode off. Returns the new quietUntil (0 when off). */
+  async setQuiet(minutes: number): Promise<number> {
+    const m = Math.min(Math.max(Math.floor(minutes), 0), QUIET_MAX_MIN);
+    if (m === 0) await this.ctx.storage.delete('quietUntil');
+    else await this.ctx.storage.put('quietUntil', Date.now() + m * 60_000);
+    await this.broadcastControls();
+    return m === 0 ? 0 : ((await this.ctx.storage.get<number>('quietUntil')) ?? 0);
+  }
+
+  /** Close: off duty and frozen. Open: unfreeze and back on duty. */
+  async setIntake(open: boolean): Promise<{ onDutyUntil: number; frozen: boolean }> {
+    if (open) return { onDutyUntil: await this.setDuty(true), frozen: false };
+    await this.setDuty(false);
+    await this.ctx.storage.put('frozen', true);
+    await this.broadcastControls();
+    return { onDutyUntil: 0, frozen: true };
+  }
+
+  /** Off duty, frozen and quiet until duty is next turned on. The Worker then erases the pages. */
+  async lockDown(): Promise<void> {
+    await this.setDuty(false);
+    await this.ctx.storage.put({ frozen: true, quietUntil: QUIET_UNTIL_DUTY });
+    await this.broadcastControls();
+  }
+
+  private async broadcastControls(): Promise<void> {
+    this.broadcast({
+      t: 'controls',
+      quietUntil: (await this.ctx.storage.get<number>('quietUntil')) ?? 0,
+      frozen: await this.isFrozen(),
+    });
+  }
+
   // -- index of live prayer pages --------------------------------------------
 
   async index(): Promise<HostIndex | null> {
@@ -221,6 +271,8 @@ export class StationDO extends DurableObject<Env> {
       place: p.place,
       onDutyUntil: (await this.ctx.storage.get<number>('duty')) ?? 0,
       pushEnabled: (await this.subscriptions()).length > 0,
+      quietUntil: (await this.ctx.storage.get<number>('quietUntil')) ?? 0,
+      frozen: await this.isFrozen(),
       sessions,
     };
   }

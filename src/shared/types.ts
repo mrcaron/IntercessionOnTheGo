@@ -7,6 +7,11 @@ export const HOUR = 60 * 60 * 1000;
 export const SESSION_LIFETIME = HOUR;
 export const PAUSE_EXTENSION = 24 * HOUR;
 export const DUTY_LENGTH = 2 * HOUR;
+export const QUIET_DEFAULT_MIN = 60;
+export const QUIET_MAX_MIN = 24 * 60;
+/** Quiet "until duty is next turned on" (used by panic). Far in the future, but a safe integer. */
+export const QUIET_UNTIL_DUTY = 8_640_000_000_000_000;
+export const BLOCK_COOLDOWN_MS = 10 * 60 * 1000;
 
 // Station-wide intake budget: how many pages one intercessor will take on, however many
 // addresses the requests come from. Env vars of the same names override these (tests).
@@ -51,7 +56,7 @@ export interface Message {
 }
 
 /** Why a rider write was refused. Limit codes become HTTP 429; `already-prayed` is a 409 state conflict. */
-export type WriteRefusal = 'limit-request' | 'limit-pause' | 'limit-chat' | 'wait-for-reply' | 'too-fast' | 'already-prayed';
+export type WriteRefusal = 'limit-request' | 'limit-pause' | 'limit-chat' | 'wait-for-reply' | 'too-fast' | 'already-prayed' | 'paused';
 
 /** What a rider has left on one page. Counts only, never content. */
 export interface RiderLimits {
@@ -77,7 +82,7 @@ export interface SessionView {
   /** Present for the rider only. */
   limits?: RiderLimits;
   /** Present for the rider only. */
-  host?: { name: string; place: string };
+  host?: { name: string; place: string; closed?: boolean };
 }
 
 export interface RequestContent {
@@ -89,6 +94,8 @@ export interface StationPublic {
   name: string;
   place: string;
   onDuty: boolean;
+  /** Intake is closed: existing pages can be read but not written by riders. */
+  closed: boolean;
 }
 
 export interface HostIndex {
@@ -96,6 +103,8 @@ export interface HostIndex {
   place: string;
   onDutyUntil: number;
   pushEnabled: boolean;
+  quietUntil: number;
+  frozen: boolean;
   sessions: SessionSummary[];
 }
 
@@ -108,6 +117,7 @@ export type SessionEvent =
 export type StationEvent =
   | { t: 'upsert'; session: SessionSummary }
   | { t: 'remove'; id: string }
-  | { t: 'duty'; onDutyUntil: number };
+  | { t: 'duty'; onDutyUntil: number }
+  | { t: 'controls'; quietUntil: number; frozen: boolean };
 
 export type NotifyKind = 'opened' | 'requested' | 'message' | 'update';

@@ -85,6 +85,8 @@ export function Chat(props: {
   errorText?(err: unknown): string | null;
   /** Stops sending and explains why (e.g. a per-page limit was reached). */
   blockedReason?: string | null;
+  /** Show the messages but not the composer (the intercessor has closed the page). */
+  readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -124,20 +126,22 @@ export function Chat(props: {
           <div ref={end} />
         </div>
       )}
-      <div class="composer">
-        <textarea
-          class="grow"
-          aria-label="Message"
-          placeholder={props.placeholder}
-          maxLength={1500}
-          value={draft}
-          onInput={(e) => setDraft(e.currentTarget.value)}
-        />
-        <button class="primary" disabled={busy || !draft.trim() || !!props.blockedReason} onClick={send}>
-          Send
-        </button>
-      </div>
-      {props.blockedReason && <p class="muted small">{props.blockedReason}</p>}
+      {!props.readOnly && (
+        <div class="composer">
+          <textarea
+            class="grow"
+            aria-label="Message"
+            placeholder={props.placeholder}
+            maxLength={1500}
+            value={draft}
+            onInput={(e) => setDraft(e.currentTarget.value)}
+          />
+          <button class="primary" disabled={busy || !draft.trim() || !!props.blockedReason} onClick={send}>
+            Send
+          </button>
+        </div>
+      )}
+      {!props.readOnly && props.blockedReason && <p class="muted small">{props.blockedReason}</p>}
       {failed && <p class="error">{failed}</p>}
     </div>
   );

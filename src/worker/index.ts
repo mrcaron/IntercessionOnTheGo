@@ -2,7 +2,7 @@
 // static pages. Nothing here writes logs or stores anything about a request.
 
 import { b64u, randomBytes, stationIdFromCode, unb64u } from '../shared/crypto';
-import type { SessionView, WriteRefusal } from '../shared/types';
+import { BLOCK_COOLDOWN_MS, QUIET_DEFAULT_MIN, type SessionView, type WriteRefusal } from '../shared/types';
 import type { Env } from './env';
 import type { Auth } from './session-do';
 
@@ -96,6 +96,13 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
       const auth = await sessionAuth(request, env);
       return auth && (await session(env, id).erase(auth)) ? json({ ok: true }) : GONE();
     }
+    case 'POST sessions/:id/block': {
+      // Host only: erase the page, then make the whole station wait before accepting new ones.
+      const host = await requireHost(request, env);
+      if (!(await session(env, id).erase({ role: 'host', station: host.station }))) return GONE();
+      await station(env, host.station).cooldown(BLOCK_COOLDOWN_MS);
+      return json({ ok: true });
+    }
     case 'GET sessions/:id/ws': {
       if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') throw new HttpError(426);
       sameOrigin(request, url);
@@ -163,6 +170,29 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
       const host = await requireHost(request, env);
       const { on } = await read<{ on: boolean }>(request);
       return json({ onDutyUntil: await station(env, host.station).setDuty(on === true) });
+    }
+    case 'POST host/quiet': {
+      const host = await requireHost(request, env);
+      const { minutes } = await read<{ minutes?: unknown }>(request);
+      const m = minutes === undefined ? QUIET_DEFAULT_MIN : Number(minutes);
+      if (!Number.isFinite(m) || m < 0) throw new HttpError(400);
+      return json({ quietUntil: await station(env, host.station).setQuiet(m) });
+    }
+    case 'POST host/intake': {
+      const host = await requireHost(request, env);
+      const { open } = await read<{ open: unknown }>(request);
+      if (typeof open !== 'boolean') throw new HttpError(400);
+      return json(await station(env, host.station).setIntake(open));
+    }
+    case 'POST host/panic': {
+      // Lock first so no new page or alert slips in, then erase. Done here rather than inside
+      // the station, because each erase reports back to the station.
+      const host = await requireHost(request, env);
+      const st = station(env, host.station);
+      await st.lockDown();
+      const live = (await st.index())?.sessions ?? [];
+      const results = await Promise.all(live.map((s) => session(env, s.id).erase({ role: 'host', station: host.station })));
+      return json({ erased: results.filter(Boolean).length });
     }
     case 'POST host/push': {
       const host = await requireHost(request, env);
@@ -295,12 +325,13 @@ const REFUSAL_STATUS: Record<WriteRefusal, number> = {
   'wait-for-reply': 429,
   'too-fast': 429,
   'already-prayed': 409,
+  paused: 403, // the intercessor has closed intake
 };
 
 const refused = (code: WriteRefusal) => json({ error: code }, REFUSAL_STATUS[code]);
 
-function forRider(view: SessionView, info: { name: string; place: string } | null): SessionView {
-  return { ...view, host: info ? { name: info.name, place: info.place } : undefined };
+function forRider(view: SessionView, info: { name: string; place: string; closed?: boolean } | null): SessionView {
+  return { ...view, host: info ? { name: info.name, place: info.place, closed: info.closed } : undefined };
 }
 
 function withPageHeaders(res: Response, url: URL): Response {

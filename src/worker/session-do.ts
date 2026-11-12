@@ -149,6 +149,11 @@ export class SessionDO extends DurableObject<Env> {
     return b64u(await sha256(auth.token)) === meta.authHash ? meta : null;
   }
 
+  /** Riders cannot write while the intercessor has closed intake. One cheap call to the station. */
+  private async intakeClosed(auth: Auth, meta: Meta): Promise<boolean> {
+    return auth.role === 'rider' && (await this.station(meta).isFrozen());
+  }
+
   /** `peek` reads without counting as opening the page, so unread messages stay unread. */
   async view(auth: Auth, peek = false): Promise<SessionView | null> {
     const meta = await this.load(auth);
@@ -161,6 +166,7 @@ export class SessionDO extends DurableObject<Env> {
   async setRequest(auth: Auth, body: string): Promise<WriteResult | null> {
     const meta = await this.load(auth);
     if (!meta || auth.role !== 'rider' || !validSealed(body, MAX_SEALED_REQUEST)) return null;
+    if (await this.intakeClosed(auth, meta)) return { ok: false, code: 'paused' };
     const refused = riderWriteRefusal(meta, 'request');
     if (refused) return { ok: false, code: refused };
     meta.requestWrites = requestWrites(meta) + 1;
@@ -178,6 +184,7 @@ export class SessionDO extends DurableObject<Env> {
     const meta = await this.load(auth);
     if (!meta || !validSealed(body, MAX_SEALED_MESSAGE) || meta.seq >= MAX_MESSAGES) return null;
     const now = Date.now();
+    if (await this.intakeClosed(auth, meta)) return { ok: false, code: 'paused' };
     if (auth.role === 'rider') {
       const refused = riderWriteRefusal(meta, 'message', now);
       if (refused) return { ok: false, code: refused };
@@ -199,6 +206,7 @@ export class SessionDO extends DurableObject<Env> {
   async pause(auth: Auth): Promise<WriteResult<{ expiresAt: number }> | null> {
     const meta = await this.load(auth);
     if (!meta || auth.role !== 'rider') return null;
+    if (await this.intakeClosed(auth, meta)) return { ok: false, code: 'paused' };
     const refused = riderWriteRefusal(meta, 'pause');
     if (refused) return { ok: false, code: refused };
     meta.pauses = (meta.pauses ?? 0) + 1;
