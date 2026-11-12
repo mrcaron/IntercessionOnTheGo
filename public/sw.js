@@ -6,8 +6,11 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 
 self.addEventListener('push', (event) => {
   let body = 'Something new is waiting.';
+  let alert = false;
   try {
-    body = event.data.json().body || body;
+    const data = event.data.json();
+    body = data.body || body;
+    alert = data.alert === true;
   } catch {
     /* keep the default */
   }
@@ -15,7 +18,8 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification('Prayer Station', {
       body,
       tag: 'prayer-station',
-      renotify: true,
+      // Only the first alert in a window buzzes again; merged follow-ups replace it quietly.
+      renotify: alert,
       icon: '/icon-192.png',
       badge: '/icon-192.png',
     }),

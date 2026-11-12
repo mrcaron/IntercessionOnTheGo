@@ -5,6 +5,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { b64u, loginChallengeText, randomBytes, sha256, verifyText } from '../shared/crypto';
 import {
   DUTY_LENGTH,
+  PUSH_WINDOW_MS,
   type HostIndex,
   type NotifyKind,
   type SessionSummary,
@@ -12,7 +13,7 @@ import {
   type StationPublic,
 } from '../shared/types';
 import type { Env } from './env';
-import { isValidSubscription, sendPush, type PushSubscriptionJSON } from './webpush';
+import { isValidSubscription, sendPush, type PushSubscriptionJSON, type PushUrgency } from './webpush';
 
 interface Profile {
   id: string;
@@ -25,13 +26,30 @@ interface Profile {
 const LOGIN_TTL = 30 * 24 * 60 * 60 * 1000;
 const CHALLENGE_TTL = 2 * 60 * 1000;
 
+// Opening a page never pushes: it is the most frequent, least useful alert and the easiest to abuse.
 const PUSH_TEXT: Partial<Record<NotifyKind, string>> = {
-  opened: 'Someone just opened a prayer page.',
   requested: 'A new prayer request is waiting.',
   message: 'Someone sent you a chat message.',
 };
 
+/** Events counted since the last push in the current window; flushed by alarm(). */
+interface PushWindow {
+  end: number;
+  requested: number;
+  message: number;
+}
+
+export function mergedText(requested: number, message: number): string {
+  const parts: string[] = [];
+  if (requested) parts.push(`${requested} new request${requested === 1 ? '' : 's'}`);
+  if (message) parts.push(`${message} message${message === 1 ? '' : 's'}`);
+  return parts.join(', ');
+}
+
 export class StationDO extends DurableObject<Env> {
+  /** Replaced in tests so they can count sends. */
+  sender: typeof sendPush = sendPush;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
@@ -130,8 +148,8 @@ export class StationDO extends DurableObject<Env> {
     const session: SessionSummary = { ...summary, unread: (prev?.unread ?? 0) + (kind === 'message' ? 1 : 0) };
     await this.ctx.storage.put(key, session);
     this.broadcast({ t: 'upsert', session });
-    const text = PUSH_TEXT[kind];
-    if (text && !this.dashboardVisible()) this.ctx.waitUntil(this.push(text));
+    // Only a request, or the first unread message on a page, is worth an alert.
+    if (kind === 'requested' || (kind === 'message' && (prev?.unread ?? 0) === 0)) await this.notePush(kind);
   }
 
   async sessionGone(id: string): Promise<void> {
@@ -167,8 +185,52 @@ export class StationDO extends DurableObject<Env> {
     await this.ctx.storage.put('push', (await this.subscriptions()).filter((s) => s.endpoint !== endpoint));
   }
 
-  /** Sends one generic line to every subscribed device. Returns how many accepted it. */
-  async push(text: string): Promise<number> {
+  private windowMs(): number {
+    const n = Number(this.env.PUSH_WINDOW_MS);
+    return n > 0 ? n : PUSH_WINDOW_MS;
+  }
+
+  /** Quiet mode (set by the intercessor controls) silences throttled pushes, not the test button. */
+  private async quiet(): Promise<boolean> {
+    return ((await this.ctx.storage.get<number>('quietUntil')) ?? 0) > Date.now();
+  }
+
+  /** First alert in a window goes out at once; later ones are counted and merged by alarm(). */
+  private async notePush(kind: 'requested' | 'message'): Promise<void> {
+    if (this.dashboardVisible() || (await this.quiet())) return;
+    const w = await this.ctx.storage.get<PushWindow>('pushWindow');
+    if (w) {
+      w[kind]++;
+      await this.ctx.storage.put('pushWindow', w);
+      return;
+    }
+    const end = Date.now() + this.windowMs();
+    await this.ctx.storage.put('pushWindow', { end, requested: 0, message: 0 } satisfies PushWindow);
+    await this.ctx.storage.setAlarm(end);
+    this.ctx.waitUntil(this.push(PUSH_TEXT[kind]!, 'high', true).catch(() => 0));
+  }
+
+  async alarm(): Promise<void> {
+    try {
+      const w = await this.ctx.storage.get<PushWindow>('pushWindow');
+      if (!w) return;
+      if (!w.requested && !w.message) {
+        await this.ctx.storage.delete('pushWindow');
+        return;
+      }
+      // Reset and re-arm before sending, so a failing push service can never cause a retry loop.
+      const end = Date.now() + this.windowMs();
+      await this.ctx.storage.put('pushWindow', { end, requested: 0, message: 0 } satisfies PushWindow);
+      await this.ctx.storage.setAlarm(end);
+      if (this.dashboardVisible() || (await this.quiet())) return;
+      await this.push(mergedText(w.requested, w.message), 'normal', false);
+    } catch {
+      /* never throw from an alarm */
+    }
+  }
+
+  /** Raw, unthrottled send of one generic line to every subscribed device. Returns how many accepted it. */
+  async push(text: string, urgency: PushUrgency = 'high', alert = true): Promise<number> {
     const { VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey } = this.env;
     if (!publicKey || !privateKey) return 0;
     const subs = await this.subscriptions();
@@ -179,11 +241,11 @@ export class StationDO extends DurableObject<Env> {
     await Promise.all(
       subs.map(async (sub) => {
         try {
-          const status = await sendPush(sub, JSON.stringify({ body: text }), {
+          const status = await this.sender(sub, JSON.stringify({ body: text, alert }), {
             publicKey,
             privateKey,
             subject,
-          });
+          }, urgency);
           if (status >= 200 && status < 300) delivered++;
           if (status === 404 || status === 410) dead.push(sub.endpoint);
         } catch {

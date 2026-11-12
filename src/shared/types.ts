@@ -12,6 +12,9 @@ export const MAX_SEALED_REQUEST = 8_000; // characters of base64url
 export const MAX_SEALED_MESSAGE = 4_000;
 export const MAX_MESSAGES = 300;
 
+/** At most one push per station in this window; events in between are merged into one. */
+export const PUSH_WINDOW_MS = 60_000;
+
 /** What the server knows about a prayer page: timing and status, never content. */
 export interface SessionSummary {
   id: string;

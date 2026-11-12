@@ -87,7 +87,14 @@ export async function vapidAuthorization(endpoint: string, vapid: Vapid, now = D
 }
 
 /** Returns the push service's HTTP status. 404 and 410 mean the subscription is dead. */
-export async function sendPush(sub: PushSubscriptionJSON, payload: string, vapid: Vapid): Promise<number> {
+export type PushUrgency = 'normal' | 'high';
+
+export async function sendPush(
+  sub: PushSubscriptionJSON,
+  payload: string,
+  vapid: Vapid,
+  urgency: PushUrgency = 'normal', // 'high' wakes the radio; reserve it for the first alert in a window
+): Promise<number> {
   const body = await encryptPayload(sub, utf8(payload));
   const res = await fetch(sub.endpoint, {
     method: 'POST',
@@ -96,7 +103,7 @@ export async function sendPush(sub: PushSubscriptionJSON, payload: string, vapid
       'Content-Encoding': 'aes128gcm',
       'Content-Type': 'application/octet-stream',
       TTL: '3600',
-      Urgency: 'high',
+      Urgency: urgency,
     },
     body,
   });
