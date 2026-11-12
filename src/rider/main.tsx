@@ -20,7 +20,7 @@ import '../shared/style.css';
 import { Partners } from '../shared/partners';
 import { applyEvent, Chat, Confirm, useDecrypted, useNow } from '../shared/thread';
 import { Toast, useToast } from '../shared/toast';
-import { MAX_PAUSES, type RiderLimits, type SessionEvent, type SessionView, type StationPublic } from '../shared/types';
+import { HOUR, MAX_PAGE_LIFETIME, MAX_PAUSES, type RiderLimits, type SessionEvent, type SessionView, type StationPublic } from '../shared/types';
 
 type Screen =
   | { kind: 'loading' }
@@ -362,7 +362,7 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
         </div>
         {view.limits?.pausesLeft === 0 && (
           <p class="muted small">
-            No more pauses: a page can be extended at most {MAX_PAUSES} times, and never past 72 hours in all. Bookmark it to come back
+            No more pauses: a page can be extended at most {MAX_PAUSES} times, and never past {MAX_PAGE_LIFETIME / HOUR} hours in all. Bookmark it to come back
             before it erases.
           </p>
         )}

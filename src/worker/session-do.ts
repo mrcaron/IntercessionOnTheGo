@@ -62,7 +62,9 @@ type RiderWrite = 'request' | 'pause' | 'message';
 export function riderWriteRefusal(meta: Meta, kind: RiderWrite, now = Date.now()): WriteRefusal | null {
   switch (kind) {
     case 'request':
-      if (meta.state === 'prayed') return 'already-prayed';
+      // Praying first is allowed (the host can pray for someone who hasn't written), so the rider's
+      // first request still goes through; only a rewrite after prayed is refused.
+      if (meta.state === 'prayed' && requestWrites(meta) >= 1) return 'already-prayed';
       return requestWrites(meta) >= 1 + MAX_REQUEST_EDITS ? 'limit-request' : null;
     case 'pause':
       // A pause that couldn't extend the page any further is refused too.
@@ -305,7 +307,7 @@ function riderLimits(meta: Meta): RiderLimits {
   const canExtend = meta.expiresAt < meta.createdAt + MAX_PAGE_LIFETIME;
   return {
     pausesLeft: canExtend ? Math.max(0, MAX_PAUSES - (meta.pauses ?? 0)) : 0,
-    requestEditsLeft: meta.state === 'prayed' ? 0 : Math.max(0, 1 + MAX_REQUEST_EDITS - requestWrites(meta)),
+    requestEditsLeft: meta.state === 'prayed' && requestWrites(meta) >= 1 ? 0 : Math.max(0, 1 + MAX_REQUEST_EDITS - requestWrites(meta)),
     messagesLeft: Math.max(0, MAX_RIDER_MESSAGES - (meta.riderMsgs ?? 0)),
     streakLeft: Math.max(0, MAX_RIDER_STREAK - (meta.riderStreak ?? 0)),
   };

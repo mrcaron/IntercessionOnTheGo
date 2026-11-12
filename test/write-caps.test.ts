@@ -143,6 +143,20 @@ describe('request cap', () => {
   });
 });
 
+describe('praying before the rider writes', () => {
+  it('still accepts the first request, then refuses rewrites once prayed again', async () => {
+    const p = await setup();
+    expect((await prayed(p)).status).toBe(200);
+    expect((await riderView(p)).limits?.requestEditsLeft).toBe(1 + MAX_REQUEST_EDITS);
+    expect((await writeRequest(p)).status).toBe(200);
+    expect((await riderView(p)).state).toBe('requested');
+    expect((await prayed(p)).status).toBe(200);
+    const res = await writeRequest(p);
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toBe('already-prayed');
+  });
+});
+
 describe('chat caps', () => {
   it('refuses a second message sent inside the gap', async () => {
     const p = await setup();
