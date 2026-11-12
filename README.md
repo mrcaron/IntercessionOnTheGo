@@ -11,6 +11,22 @@ hour unless the rider presses pause (each press adds 24 hours, at most 3 times a
 
 Watch a rider scan the hat, send a request, and see it prayed for live.
 
+## Made for prayer and mission
+
+<p align="center">
+  <a href="https://www.24-7prayer.com"><img src="docs/logo-24-7-prayer.png" alt="24-7 Prayer" width="280"></a>
+  &nbsp;&nbsp;
+  <a href="https://orderofthemustardseed.com"><img src="docs/logo-order-of-the-mustard-seed.png" alt="Order of the Mustard Seed" width="280"></a>
+</p>
+
+Mobile Prayer Station is a personal project by a member of the
+[Order of the Mustard Seed](https://orderofthemustardseed.com), a way of working
+out the vows of Prayer and Mission, within the wider
+[24-7 Prayer](https://www.24-7prayer.com) movement.
+
+It is an independent project and not an official project of 24-7 Prayer or the
+Order of the Mustard Seed.
+
 ## How it keeps its promises
 
 - **Only the two of you can read it.** The rider's phone makes a random page
@@ -21,7 +37,7 @@ Watch a rider scan the hat, send a request, and see it prayed for live.
   calls `deleteAll()`, and the address then answers exactly like one that never
   existed. Request logging is off and there are no analytics or third-party
   scripts.
-- **"Praying over you right now" is true.** Pages can only be opened while your
+- **"Praying for you right now" is true.** Pages can only be opened while your
   dashboard's on-duty switch is on (it turns itself off after 2 hours).
 
 Limits worth knowing: the server can still see that a page exists and when; as
