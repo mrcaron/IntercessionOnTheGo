@@ -184,7 +184,7 @@ function Setup(props: { existing: Identity | null; onReady(me: Identity): Promis
           <label for="place">Where you'll be praying</label>
           <input id="place" type="text" maxLength={60} value={place} onInput={(e) => setPlace(e.currentTarget.value)} />
           <p class="muted small" style="margin:6px 0 0">
-            Riders read: "praying over you right now {place || 'on the bus'}."
+            Riders read: "praying for you right now {place || 'on the bus'}."
           </p>
         </div>
         <div>

@@ -269,10 +269,10 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
     <main>
       <Toast toast={toast} onDismiss={dismiss} />
       <p class="eyebrow">Mobile Prayer Station</p>
-      <h1>Hi there, I'm {host.name}.</h1>
+      <h1>Hi, I'm {host.name}.</h1>
       <div class="lead" style="margin-top:16px">
         <p>
-          I'm an apprentice of Jesus, praying over you right now {host.place}. God sees you and loves you deeply, in the joys and
+          I'm an apprentice of Jesus, praying for you right now {host.place}. God sees you and loves you deeply, in the joys and
           sorrows you carry. The sign is that you saw me and got here.
         </p>
       </div>

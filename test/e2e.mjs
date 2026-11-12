@@ -118,7 +118,7 @@ try {
   // --- rider scans ----------------------------------------------------------
   await rider.goto('about:blank');
   await rider.goto(link);
-  await rider.getByRole('heading', { name: "Hi there, I'm Sam." }).waitFor();
+  await rider.getByRole('heading', { name: "Hi, I'm Sam." }).waitFor();
   await rider.waitForURL(/\/p\/[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{43}$/);
   const pageUrl = rider.url();
   const pageKey = pageUrl.split('#')[1];
