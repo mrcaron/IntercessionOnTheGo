@@ -2,7 +2,7 @@
 // static pages. Nothing here writes logs or stores anything about a request.
 
 import { b64u, randomBytes, stationIdFromCode, unb64u } from '../shared/crypto';
-import type { SessionView } from '../shared/types';
+import type { SessionView, WriteRefusal } from '../shared/types';
 import type { Env } from './env';
 import type { Auth } from './session-do';
 
@@ -62,20 +62,24 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
       await limit(env.WRITE_LIMIT, request);
       const auth = await sessionAuth(request, env);
       const { body } = await read<{ body: string }>(request);
-      return auth && (await session(env, id).setRequest(auth, body)) ? json({ ok: true }) : GONE();
+      const res = auth && (await session(env, id).setRequest(auth, body));
+      if (!res) return GONE();
+      return res.ok ? json({ ok: true }) : refused(res.code);
     }
     case 'POST sessions/:id/messages': {
       await limit(env.WRITE_LIMIT, request);
       const auth = await sessionAuth(request, env);
       const { body } = await read<{ body: string }>(request);
-      const msg = auth && (await session(env, id).addMessage(auth, body));
-      return msg ? json(msg, 201) : GONE();
+      const res = auth && (await session(env, id).addMessage(auth, body));
+      if (!res) return GONE();
+      return res.ok ? json(res.msg, 201) : refused(res.code);
     }
     case 'POST sessions/:id/pause': {
       await limit(env.WRITE_LIMIT, request);
       const auth = await sessionAuth(request, env);
-      const expiresAt = auth && (await session(env, id).pause(auth));
-      return expiresAt ? json({ expiresAt }) : GONE();
+      const res = auth && (await session(env, id).pause(auth));
+      if (!res) return GONE();
+      return res.ok ? json({ expiresAt: res.expiresAt }) : refused(res.code);
     }
     case 'POST sessions/:id/prayed': {
       const auth = await sessionAuth(request, env);
@@ -275,6 +279,18 @@ async function sessionAuth(request: Request, env: Env): Promise<Auth | null> {
   const host = await hostAuth(request, env);
   return host ? { role: 'host', station: host.station } : null;
 }
+
+// Refusal code -> HTTP status for rider writes. Limits are 429; a state conflict is 409.
+const REFUSAL_STATUS: Record<WriteRefusal, number> = {
+  'limit-request': 429,
+  'limit-pause': 429,
+  'limit-chat': 429,
+  'wait-for-reply': 429,
+  'too-fast': 429,
+  'already-prayed': 409,
+};
+
+const refused = (code: WriteRefusal) => json({ error: code }, REFUSAL_STATUS[code]);
 
 function forRider(view: SessionView, info: { name: string; place: string } | null): SessionView {
   return { ...view, host: info ? { name: info.name, place: info.place } : undefined };
