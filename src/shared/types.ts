@@ -7,6 +7,11 @@ export const HOUR = 60 * 60 * 1000;
 export const SESSION_LIFETIME = HOUR;
 export const PAUSE_EXTENSION = 24 * HOUR;
 export const DUTY_LENGTH = 2 * HOUR;
+export const QUIET_DEFAULT_MIN = 60;
+export const QUIET_MAX_MIN = 24 * 60;
+/** Quiet "until duty is next turned on" (used by panic). Far in the future, but a safe integer. */
+export const QUIET_UNTIL_DUTY = 8_640_000_000_000_000;
+export const BLOCK_COOLDOWN_MS = 10 * 60 * 1000;
 
 export const MAX_SEALED_REQUEST = 8_000; // characters of base64url
 export const MAX_SEALED_MESSAGE = 4_000;
@@ -47,7 +52,7 @@ export interface SessionView {
   /** Present for the intercessor only. */
   wrappedKey?: string;
   /** Present for the rider only. */
-  host?: { name: string; place: string };
+  host?: { name: string; place: string; closed?: boolean };
 }
 
 export interface RequestContent {
@@ -59,6 +64,14 @@ export interface StationPublic {
   name: string;
   place: string;
   onDuty: boolean;
+  /** Intake is closed: existing pages can be read but not written by riders. */
+  closed: boolean;
+}
+
+/** A write that was turned away, and why. The Worker maps the code to an HTTP status. */
+export interface Refusal {
+  ok: false;
+  code: 'paused';
 }
 
 export interface HostIndex {
@@ -66,6 +79,8 @@ export interface HostIndex {
   place: string;
   onDutyUntil: number;
   pushEnabled: boolean;
+  quietUntil: number;
+  frozen: boolean;
   sessions: SessionSummary[];
 }
 
@@ -78,6 +93,7 @@ export type SessionEvent =
 export type StationEvent =
   | { t: 'upsert'; session: SessionSummary }
   | { t: 'remove'; id: string }
-  | { t: 'duty'; onDutyUntil: number };
+  | { t: 'duty'; onDutyUntil: number }
+  | { t: 'controls'; quietUntil: number; frozen: boolean };
 
 export type NotifyKind = 'opened' | 'requested' | 'message' | 'update';

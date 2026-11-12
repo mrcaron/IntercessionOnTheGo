@@ -10,6 +10,7 @@ import {
   PAUSE_EXTENSION,
   SESSION_LIFETIME,
   type Message,
+  type Refusal,
   type NotifyKind,
   type Role,
   type SessionEvent,
@@ -105,6 +106,12 @@ export class SessionDO extends DurableObject<Env> {
     return b64u(await sha256(auth.token)) === meta.authHash ? meta : null;
   }
 
+  /** Riders cannot write while the intercessor has closed intake. One cheap call to the station. */
+  private async riderWriteRefusal(auth: Auth, meta: Meta): Promise<Refusal | null> {
+    if (auth.role !== 'rider') return null;
+    return (await this.station(meta).isFrozen()) ? { ok: false, code: 'paused' } : null;
+  }
+
   /** `peek` reads without counting as opening the page, so unread messages stay unread. */
   async view(auth: Auth, peek = false): Promise<SessionView | null> {
     const meta = await this.load(auth);
@@ -114,9 +121,11 @@ export class SessionDO extends DurableObject<Env> {
     return this.toView(meta, messages, auth.role);
   }
 
-  async setRequest(auth: Auth, body: string): Promise<boolean> {
+  async setRequest(auth: Auth, body: string): Promise<boolean | Refusal> {
     const meta = await this.load(auth);
     if (!meta || auth.role !== 'rider' || !validSealed(body, MAX_SEALED_REQUEST)) return false;
+    const refused = await this.riderWriteRefusal(auth, meta);
+    if (refused) return refused;
     meta.request = body;
     meta.requestAt = Date.now();
     meta.state = 'requested';
@@ -127,9 +136,11 @@ export class SessionDO extends DurableObject<Env> {
     return true;
   }
 
-  async addMessage(auth: Auth, body: string): Promise<Message | null> {
+  async addMessage(auth: Auth, body: string): Promise<Message | Refusal | null> {
     const meta = await this.load(auth);
     if (!meta || !validSealed(body, MAX_SEALED_MESSAGE) || meta.seq >= MAX_MESSAGES) return null;
+    const refused = await this.riderWriteRefusal(auth, meta);
+    if (refused) return refused;
     meta.seq += 1;
     const msg: Message = { seq: meta.seq, from: auth.role, ts: Date.now(), body };
     if (auth.role === 'rider') meta.hasChat = true;
@@ -139,9 +150,11 @@ export class SessionDO extends DurableObject<Env> {
     return msg;
   }
 
-  async pause(auth: Auth): Promise<number | null> {
+  async pause(auth: Auth): Promise<number | Refusal | null> {
     const meta = await this.load(auth);
     if (!meta || auth.role !== 'rider') return null;
+    const refused = await this.riderWriteRefusal(auth, meta);
+    if (refused) return refused;
     meta.expiresAt += PAUSE_EXTENSION;
     await this.ctx.storage.put('meta', meta);
     await this.ctx.storage.setAlarm(meta.expiresAt);

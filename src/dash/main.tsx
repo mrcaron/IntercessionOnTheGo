@@ -25,7 +25,7 @@ import {
 import '../shared/style.css';
 import { Partners } from '../shared/partners';
 import { applyEvent, Chat, Confirm, useDecrypted, useNow } from '../shared/thread';
-import type { HostIndex, SessionEvent, SessionSummary, SessionView, StationEvent } from '../shared/types';
+import { QUIET_UNTIL_DUTY, type HostIndex, type SessionEvent, SessionSummary, SessionView, StationEvent } from '../shared/types';
 import { clearKeys, loadKeys, saveKeys } from './keystore';
 import { useTitles } from './titles';
 
@@ -224,6 +224,8 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
   const { me, index } = props;
   const [sessions, setSessions] = useState<SessionSummary[]>(index.sessions);
   const [onDutyUntil, setOnDutyUntil] = useState(index.onDutyUntil);
+  const [quietUntil, setQuietUntil] = useState(index.quietUntil);
+  const [frozen, setFrozen] = useState(index.frozen);
   const [view, setView] = useState<{ kind: 'list' } | { kind: 'settings' } | { kind: 'detail'; id: string }>({ kind: 'list' });
   const now = useNow();
   const titleOf = useTitles(me.keys, sessions);
@@ -235,11 +237,17 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
       loadIndex(me).then((fresh) => {
         setSessions(fresh.sessions);
         setOnDutyUntil(fresh.onDutyUntil);
+        setQuietUntil(fresh.quietUntil);
+        setFrozen(fresh.frozen);
       }, () => {});
     const report = () => socket.send(document.visibilityState === 'visible' ? 'visible' : 'hidden');
     socket = live<StationEvent>('host/ws', {
       onEvent: (e) => {
         if (e.t === 'duty') setOnDutyUntil(e.onDutyUntil);
+        if (e.t === 'controls') {
+          setQuietUntil(e.quietUntil);
+          setFrozen(e.frozen);
+        }
         if (e.t === 'remove') setSessions((list) => list.filter((s) => s.id !== e.id));
         if (e.t === 'upsert') setSessions((list) => [...list.filter((s) => s.id !== e.session.id), e.session]);
       },
@@ -259,6 +267,7 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
 
   const alive = useMemo(() => sessions.filter((s) => s.expiresAt > now).sort((a, b) => a.expiresAt - b.expiresAt), [sessions, now]);
   const onDuty = onDutyUntil > now;
+  const quiet = quietUntil > now;
 
   if (view.kind === 'settings') {
     return <Settings me={me} index={index} setIndex={props.setIndex} onBack={() => setView({ kind: 'list' })} />;
@@ -299,6 +308,36 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
         </span>
       </button>
 
+      {frozen && (
+        <p class="banner small" role="status">
+          Pages are closed. People can read what's there but can't write.
+        </p>
+      )}
+      <div class="row wrap">
+        {quiet ? (
+          <button
+            onClick={async () => setQuietUntil((await api<{ quietUntil: number }>('host/quiet', { body: { minutes: 0 } })).quietUntil)}
+          >
+            {quietUntil >= QUIET_UNTIL_DUTY ? 'Quiet until you go on duty' : `Quiet until ${clock(quietUntil)}`} · Turn off
+          </button>
+        ) : (
+          <button onClick={async () => setQuietUntil((await api<{ quietUntil: number }>('host/quiet', { body: {} })).quietUntil)}>
+            Quiet my phone for 1 hour
+          </button>
+        )}
+        {
+          <button
+            onClick={async () => {
+              const res = await api<{ onDutyUntil: number; frozen: boolean }>('host/intake', { body: { open: frozen } });
+              setOnDutyUntil(res.onDutyUntil);
+              setFrozen(res.frozen);
+            }}
+          >
+            {frozen ? 'Reopen' : 'Close intake'}
+          </button>
+        }
+      </div>
+
       {!index.pushEnabled && (
         <p class="banner small">
           Notifications are off on this device.{' '}
@@ -329,6 +368,13 @@ function Dashboard(props: { me: Identity; index: Index; setIndex(i: Index): void
           </ul>
         </>
       )}
+
+      <h2 class="section-title">If something is wrong</h2>
+      <Confirm
+        label="Erase everything and close up"
+        confirm="Tap again: erase every page, go off duty, silence alerts"
+        onConfirm={() => api('host/panic', { body: {} }).then(() => setSessions([]), () => {})}
+      />
     </main>
   );
 }
@@ -483,6 +529,12 @@ function Detail(props: { me: Identity; id: string; title: string; onBack(): void
               />
             )}
           </section>
+
+          <Confirm
+            label="Block this page"
+            confirm="Tap again: erase it and pause new pages for 10 minutes"
+            onConfirm={() => api(`sessions/${id}/block`, { method: 'POST', body: {} }).then(props.onBack, props.onBack)}
+          />
 
           <Confirm
             label="Erase this page now"

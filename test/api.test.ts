@@ -96,7 +96,7 @@ describe('prayer page', () => {
   it('cannot be opened while the intercessor is off duty', async () => {
     const station = await makeStation(false);
     const info = (await (await call(`/api/station/${station.id}`)).json()) as { onDuty: boolean; name: string; place: string };
-    expect(info).toEqual({ name: 'Sam', place: 'on the bus', onDuty: false });
+    expect(info).toEqual({ name: 'Sam', place: 'on the bus', onDuty: false, closed: false });
     const { res } = await openPage(station);
     expect(res.status).toBe(403);
     expect((await hostIndex(station.cookie)).sessions).toHaveLength(0);
@@ -107,7 +107,7 @@ describe('prayer page', () => {
     const page = await openPage(station);
     expect(page.res.status).toBe(201);
     const id = page.view!.id;
-    expect(page.view!.host).toEqual({ name: 'Sam', place: 'on the bus' });
+    expect(page.view!.host).toEqual({ name: 'Sam', place: 'on the bus', closed: false });
     expect(page.view!.wrappedKey).toBeUndefined();
     expect(page.view!.expiresAt - page.view!.createdAt).toBe(SESSION_LIFETIME);
 

@@ -277,6 +277,12 @@ function Page(props: { initial: SessionView; keys: SessionKeys; onGone(): void }
         </p>
       </div>
 
+      {view.host?.closed && (
+        <div class="banner" role="status">
+          This page is closed for now. You can still read what's here, but I can't take new messages.
+        </div>
+      )}
+
       {view.state === 'prayed' && view.prayedAt && (
         <div class="banner good" role="status">
           🙏 I prayed for you at {clock(view.prayedAt)}.
