@@ -11,6 +11,8 @@ export interface Env {
   VAPID_PRIVATE_KEY?: string;
   /** Optional contact (https: or mailto:) sent to push services. Defaults to the site address. */
   VAPID_SUBJECT?: string;
+  /** Optional override of the push merge window in ms (tests). Defaults to PUSH_WINDOW_MS. */
+  PUSH_WINDOW_MS?: string;
   CREATE_LIMIT?: RateLimit;
   WRITE_LIMIT?: RateLimit;
 }
