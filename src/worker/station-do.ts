@@ -6,6 +6,10 @@ import { b64u, loginChallengeText, randomBytes, sha256, verifyText } from '../sh
 import {
   DUTY_LENGTH,
   PUSH_WINDOW_MS,
+  MAX_LIVE_PAGES,
+  MAX_NEW_PAGES_PER_MINUTE,
+  MAX_PAGES_PER_SHIFT,
+  RESERVATION_TTL,
   type HostIndex,
   type NotifyKind,
   type SessionSummary,
@@ -22,6 +26,14 @@ interface Profile {
   name: string;
   place: string;
 }
+
+export interface IntakeLimits {
+  livePages: number;
+  perMinute: number;
+  perShift: number;
+}
+
+const num = (v: string | undefined, fallback: number) => (v !== undefined && Number.isFinite(+v) && +v >= 0 ? +v : fallback);
 
 const LOGIN_TTL = 30 * 24 * 60 * 60 * 1000;
 const CHALLENGE_TTL = 2 * 60 * 1000;
@@ -123,8 +135,62 @@ export class StationDO extends DurableObject<Env> {
   async setDuty(on: boolean): Promise<number> {
     const until = on ? Date.now() + DUTY_LENGTH : 0;
     await this.ctx.storage.put('duty', until);
+    if (on) await this.ctx.storage.put('shiftCount', 0); // a new shift gets a fresh page budget
     this.broadcast({ t: 'duty', onDutyUntil: until });
     return until;
+  }
+
+  // -- intake budget --------------------------------------------------------
+
+  /**
+   * Decides whether a new page may open, and reserves its slot in the same call. Calls to a
+   * Durable Object are serialized, so two creates at once cannot both take the last slot.
+   * `overrides` is for tests only; the Worker route never passes it.
+   */
+  async admit(id: string, overrides?: Partial<IntakeLimits>): Promise<{ ok: true } | { ok: false; reason: 'off-duty' | 'busy' }> {
+    if (!(await this.onDuty())) return { ok: false, reason: 'off-duty' };
+    const now = Date.now();
+    const limits: IntakeLimits = {
+      livePages: num(this.env.MAX_LIVE_PAGES, MAX_LIVE_PAGES),
+      perMinute: num(this.env.MAX_NEW_PAGES_PER_MINUTE, MAX_NEW_PAGES_PER_MINUTE),
+      perShift: num(this.env.MAX_PAGES_PER_SHIFT, MAX_PAGES_PER_SHIFT),
+      ...overrides,
+    };
+    if (((await this.ctx.storage.get<number>('cooldownUntil')) ?? 0) > now) return { ok: false, reason: 'busy' };
+    const recent = ((await this.ctx.storage.get<number[]>('recentOpens')) ?? []).filter((t) => t > now - 60_000);
+    const shift = (await this.ctx.storage.get<number>('shiftCount')) ?? 0;
+    if ((await this.livePages(now)) >= limits.livePages || recent.length >= limits.perMinute || shift >= limits.perShift) {
+      return { ok: false, reason: 'busy' };
+    }
+    await this.ctx.storage.put({
+      [`r:${id}`]: now + RESERVATION_TTL,
+      recentOpens: [...recent, now],
+      shiftCount: shift + 1,
+    });
+    return { ok: true };
+  }
+
+  /** Gives back a reserved slot when the page could not be created. */
+  async release(id: string): Promise<void> {
+    await this.ctx.storage.delete(`r:${id}`);
+  }
+
+  /** Refuses new pages until `ms` from now (never shortens an existing cool-down). */
+  async cooldown(ms: number): Promise<void> {
+    const until = Math.max((await this.ctx.storage.get<number>('cooldownUntil')) ?? 0, Date.now() + ms);
+    await this.ctx.storage.put('cooldownUntil', until);
+  }
+
+  // Pages in the index that have not expired, plus reservations still waiting for their page.
+  // Ignoring expired entries keeps the count right even if a sessionGone call were ever lost.
+  private async livePages(now: number): Promise<number> {
+    let n = 0;
+    for (const s of (await this.ctx.storage.list<SessionSummary>({ prefix: 's:' })).values()) if (s.expiresAt > now) n++;
+    for (const [key, exp] of await this.ctx.storage.list<number>({ prefix: 'r:' })) {
+      if (exp > now) n++;
+      else await this.ctx.storage.delete(key);
+    }
+    return n;
   }
 
   // -- index of live prayer pages --------------------------------------------
@@ -144,6 +210,7 @@ export class StationDO extends DurableObject<Env> {
 
   async sessionEvent(summary: Omit<SessionSummary, 'unread'>, kind: NotifyKind): Promise<void> {
     const key = `s:${summary.id}`;
+    await this.ctx.storage.delete(`r:${summary.id}`); // the page now counts through the index
     const prev = await this.ctx.storage.get<SessionSummary>(key);
     const session: SessionSummary = { ...summary, unread: (prev?.unread ?? 0) + (kind === 'message' ? 1 : 0) };
     await this.ctx.storage.put(key, session);

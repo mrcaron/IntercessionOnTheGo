@@ -26,6 +26,7 @@ type Screen =
   | { kind: 'loading' }
   | { kind: 'home' }
   | { kind: 'offduty'; name: string }
+  | { kind: 'busy'; name: string }
   | { kind: 'gone' }
   | { kind: 'trouble' }
   | { kind: 'page'; view: SessionView; keys: SessionKeys };
@@ -144,6 +145,7 @@ async function boot(): Promise<Screen> {
     return { kind: 'page', view, keys };
   } catch (err) {
     if (err instanceof ApiError && err.code === 'off-duty') return { kind: 'offduty', name: info.name };
+    if (err instanceof ApiError && err.code === 'busy') return { kind: 'busy', name: info.name };
     return { kind: 'trouble' };
   }
 }
@@ -168,6 +170,15 @@ function Screens() {
         <Notice title={`Hi, I'm ${screen.name}.`}>
           <p>I'm not out praying right now, so this page isn't open. If you see me again, scan the hat and say hello.</p>
           <p>God sees you and loves you deeply.</p>
+        </Notice>
+      );
+    case 'busy':
+      return (
+        <Notice title={`Hi, I'm ${screen.name}.`}>
+          <p>I'm with someone right now. Please try again in a minute or two.</p>
+          <button class="primary" onClick={() => location.reload()}>
+            Try again
+          </button>
         </Notice>
       );
     case 'gone':
