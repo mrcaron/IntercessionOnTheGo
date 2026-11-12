@@ -13,6 +13,10 @@ export interface Env {
   VAPID_SUBJECT?: string;
   /** Optional override of the push merge window in ms (tests). Defaults to PUSH_WINDOW_MS. */
   PUSH_WINDOW_MS?: string;
+  /** Optional overrides (numbers as text) for the station intake limits in shared/types.ts. */
+  MAX_LIVE_PAGES?: string;
+  MAX_NEW_PAGES_PER_MINUTE?: string;
+  MAX_PAGES_PER_SHIFT?: string;
   CREATE_LIMIT?: RateLimit;
   WRITE_LIMIT?: RateLimit;
 }
