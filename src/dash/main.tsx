@@ -23,6 +23,7 @@ import {
   type StationKeys,
 } from '../shared/crypto';
 import '../shared/style.css';
+import { Partners } from '../shared/partners';
 import { applyEvent, Chat, Confirm, useDecrypted, useNow } from '../shared/thread';
 import type { HostIndex, SessionEvent, SessionSummary, SessionView, StationEvent } from '../shared/types';
 import { clearKeys, loadKeys, saveKeys } from './keystore';
@@ -59,7 +60,7 @@ async function loadIndex(me: Identity): Promise<Index> {
 
 // ---------------------------------------------------------------------------
 
-function App() {
+function Screens() {
   const [me, setMe] = useState<Identity | null | undefined>(undefined);
   const [index, setIndex] = useState<Index | null>(null);
   const [needsRegistration, setNeedsRegistration] = useState(false);
@@ -98,6 +99,15 @@ function App() {
   if (!me || needsRegistration) return <Setup existing={me} onReady={enter} />;
   if (!index) return <p class="muted">Loading…</p>;
   return <Dashboard me={me} index={index} setIndex={setIndex} />;
+}
+
+function App() {
+  return (
+    <>
+      <Screens />
+      <Partners />
+    </>
+  );
 }
 
 // ---------------------------------------------------------------------------

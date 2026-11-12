@@ -28,6 +28,31 @@ const stop = () => {
 const step = (name) => console.log(`✓ ${name}`);
 const shot = async (page, name) => SHOTS && page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
 
+const PARTNER_LINKS = [
+  ['https://www.24-7prayer.com', '24-7 Prayer'],
+  ['https://orderofthemustardseed.com', 'Order of the Mustard Seed'],
+];
+
+// Both logos present, linked to the right sites, safe to follow, and actually loaded
+// (loading proves the page's content security policy allows them).
+async function checkPartners(page, who) {
+  const links = page.locator('footer.partners a');
+  await links.first().waitFor();
+  if ((await links.count()) !== PARTNER_LINKS.length) throw new Error(`${who}: expected ${PARTNER_LINKS.length} partner links`);
+  for (const [i, [href, name]] of PARTNER_LINKS.entries()) {
+    const a = links.nth(i);
+    const got = await a.evaluate((el) => ({ href: el.getAttribute('href'), target: el.target, rel: el.rel, alt: el.querySelector('img')?.alt }));
+    if (got.href !== href) throw new Error(`${who}: ${name} links to ${got.href}`);
+    if (got.target !== '_blank') throw new Error(`${who}: ${name} link does not open a new tab`);
+    if (!/noopener/.test(got.rel) || !/noreferrer/.test(got.rel)) throw new Error(`${who}: ${name} link rel is "${got.rel}"`);
+    if (got.alt !== name) throw new Error(`${who}: ${name} logo alt text is "${got.alt}"`);
+  }
+  await page.waitForFunction(() => [...document.querySelectorAll('footer.partners img')].every((i) => i.complete && i.naturalWidth > 0));
+  const box = await page.locator('footer.partners').boundingBox();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  if (!box || overflow) throw new Error(`${who}: footer missing or the page scrolls sideways`);
+}
+
 async function waitForServer() {
   for (let i = 0; i < 120; i++) {
     try {
@@ -57,6 +82,8 @@ try {
   const sent = [];
   rider.on('request', (r) => sent.push(`${r.method()} ${r.url()} ${r.postData() ?? ''} ${JSON.stringify(r.headers())}`));
   rider.on('websocket', (ws) => sent.push(`WS ${ws.url()}`));
+  const riderUrls = [];
+  rider.on('request', (r) => riderUrls.push(r.url()));
 
   // --- intercessor sets up -------------------------------------------------
   await host.goto(`${BASE}/dash`);
@@ -68,7 +95,9 @@ try {
   await shot(host, '01-setup');
   await host.getByRole('button', { name: 'Create my station' }).click();
   await host.getByRole('switch').waitFor();
-  step('intercessor creates a station');
+  await checkPartners(host, 'dashboard');
+  await shot(host, '01b-dash-footer');
+  step('intercessor creates a station; the dashboard footer shows both linked logos');
 
   await host.getByRole('button', { name: 'Settings' }).click();
   const link = (await host.locator('.qr + p').innerText()).trim();
@@ -94,6 +123,7 @@ try {
   const pageUrl = rider.url();
   const pageKey = pageUrl.split('#')[1];
   await shot(rider, '04-rider-landing');
+  await checkPartners(rider, 'rider page');
   await host.getByText('Opened your page').waitFor();
   step('rider lands; dashboard shows the new page live');
 
@@ -162,6 +192,8 @@ try {
     if (all.includes(value)) throw new Error(`the rider's browser sent the ${what} over the network`);
   }
   if (!all.includes('/api/sessions')) throw new Error('request capture is not working');
+  const foreign = riderUrls.filter((u) => !u.startsWith(BASE) && !u.startsWith('data:') && !u.startsWith('blob:') && u !== 'about:blank');
+  if (foreign.length) throw new Error(`the rider's browser contacted other sites: ${foreign.join(', ')}`);
   step(`privacy: ${sent.length} rider requests inspected, no key or plaintext in any of them`);
 
   // --- erase --------------------------------------------------------------------
@@ -176,8 +208,14 @@ try {
   step('erase removes the page for both sides; the old address shows nothing');
 
   // --- the dashboard survives a reload (keys in IndexedDB, cookie login) ---------
+  // Wait until the dashboard's live connection is open before dropping the login, so the
+  // connection is not attempted without a cookie (which would log an expected 401).
+  const live = host
+    .waitForEvent('websocket', { predicate: (ws) => ws.url().includes('/api/host/ws') })
+    .then((ws) => ws.waitForEvent('framesent'));
   await host.reload();
   await host.getByRole('switch').waitFor();
+  await live;
   await hostCtx.clearCookies();
   await host.reload();
   await host.getByRole('switch').waitFor();

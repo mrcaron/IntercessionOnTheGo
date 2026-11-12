@@ -17,6 +17,7 @@ import {
   type SessionKeys,
 } from '../shared/crypto';
 import '../shared/style.css';
+import { Partners } from '../shared/partners';
 import { applyEvent, Chat, Confirm, useDecrypted, useNow } from '../shared/thread';
 import type { SessionEvent, SessionView, StationPublic } from '../shared/types';
 
@@ -121,7 +122,7 @@ async function boot(): Promise<Screen> {
   }
 }
 
-function App() {
+function Screens() {
   const [screen, setScreen] = useState<Screen>({ kind: 'loading' });
   useEffect(() => {
     boot().then(setScreen, () => setScreen({ kind: 'trouble' }));
@@ -161,6 +162,15 @@ function App() {
     case 'page':
       return <Page initial={screen.view} keys={screen.keys} onGone={() => setScreen({ kind: 'gone' })} />;
   }
+}
+
+function App() {
+  return (
+    <>
+      <Screens />
+      <Partners />
+    </>
+  );
 }
 
 function Notice(props: { title: string; children: preact.ComponentChildren }) {
