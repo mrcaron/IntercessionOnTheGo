@@ -82,15 +82,67 @@ real browsers.
 ## Deploy to Cloudflare
 
 You need a Cloudflare account. To serve the app from your own address, that
-domain must be a zone on the same account. Set the address in `wrangler.jsonc`
-under `routes` (it is `gopray.greenhouse247.org` there now); without `routes`,
-Cloudflare gives it a free `workers.dev` address instead.
+domain must be a zone on the same account. The address is set in
+`wrangler.jsonc` under `routes` (it is `gopray.greenhouse247.org` there now);
+without `routes`, Cloudflare gives the app a free `workers.dev` address instead.
+
+### Automatic deploys (recommended)
+
+Connect the repository to Cloudflare once, and every push to `main` is built and
+deployed with no manual step (Cloudflare calls this Workers Builds).
+
+1. In the Cloudflare dashboard, go to **Workers & Pages**, choose **Create
+   application**, then **Import a repository**, pick GitHub and select this
+   repository. You authorise Cloudflare's GitHub app in your browser.
+2. Settings for the new Worker:
+   - **Worker name:** `prayer-station`. It must match `name` in
+     `wrangler.jsonc`, or the build fails.
+   - **Build command:** `npm run build`
+   - **Deploy command:** `npx wrangler deploy` (the default)
+   - **Production branch:** `main`
+3. Under **Settings → Build → Branch control**, turn off **Enable Preview
+   Builds**, so other branches do not build previews of the app.
+4. Let the first build run. The app is live, but with no secrets yet, so no
+   station can be created and notifications are off.
+5. Add the secrets. On your own computer, create a random setup code and fresh
+   notification keys, with your site's address as the contact for push services.
+   This writes `.secrets.json` and prints only the setup code, which you keep:
+
+   ```bash
+   npm install
+   ```
+
+   ```bash
+   npm run secrets -- https://gopray.greenhouse247.org
+   ```
+
+   Then upload them, either by signing in and sending the file:
+
+   ```bash
+   npx wrangler login
+   ```
+
+   ```bash
+   npx wrangler secret bulk .secrets.json
+   ```
+
+   or by adding each of the four values from `.secrets.json` as a **secret** under
+   the Worker's **Settings → Variables & Secrets** (not as a build variable,
+   which the running app cannot see). Delete `.secrets.json` afterwards:
+
+   ```bash
+   rm .secrets.json
+   ```
+
+Cloudflare keeps secrets across later deploys. Builds only compile and deploy:
+they do not run the tests, so run `npm test` before merging. To undo a bad
+deploy, roll back from the Worker's **Deployments** tab.
+
+### Deploy by hand (alternative)
 
 Run these on your own computer (the static files upload needs your own sign-in):
 
-1. Create a random setup code and fresh notification keys, with your site's
-   address as the contact for push services. This writes `.secrets.json` and
-   prints only the setup code, which you keep:
+1. Create the secrets file, as in step 5 above:
 
    ```bash
    npm install
@@ -116,12 +168,15 @@ Run these on your own computer (the static files upload needs your own sign-in):
    rm .secrets.json
    ```
 
-4. On the phone you will carry, open `https://<your-address>/dash`, enter your
+### After the first deploy
+
+1. On the phone you will carry, open `https://<your-address>/dash`, enter your
    name and the setup code. On iPhone, first use Share → Add to Home Screen and
    open it from the new icon, otherwise notifications cannot work.
-5. In Settings: turn on notifications, download a key backup, and download the
+2. In Settings: turn on notifications, download a key backup, and download the
    QR code for your hat.
-6. Remove the setup code so nobody else can create a station:
+3. Remove the setup code so nobody else can create a station: delete
+   `SETUP_TOKEN` under **Settings → Variables & Secrets**, or run:
 
    ```bash
    npx wrangler secret delete SETUP_TOKEN
