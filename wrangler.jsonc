@@ -17,6 +17,9 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StationDO", "SessionDO"] }],
+  // Serve from our own address. Cloudflare creates the DNS record and certificate for a custom domain,
+  // which needs greenhouse247.org to be a zone on the same account.
+  "routes": [{ "pattern": "gopray.greenhouse247.org", "custom_domain": true }],
   "ratelimits": [
     // New pages, setup and login attempts, per visitor address.
     { "name": "CREATE_LIMIT", "namespace_id": "4101", "simple": { "limit": 10, "period": 60 } },

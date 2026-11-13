@@ -81,37 +81,47 @@ real browsers.
 
 ## Deploy to Cloudflare
 
-1. Create the notification keys and a setup code:
+You need a Cloudflare account. To serve the app from your own address, that
+domain must be a zone on the same account. Set the address in `wrangler.jsonc`
+under `routes` (it is `gopray.greenhouse247.org` there now); without `routes`,
+Cloudflare gives it a free `workers.dev` address instead.
+
+Run these on your own computer (the static files upload needs your own sign-in):
+
+1. Create a random setup code and fresh notification keys, with your site's
+   address as the contact for push services. This writes `.secrets.json` and
+   prints only the setup code, which you keep:
 
    ```bash
-   npm run vapid
+   npm install
    ```
 
    ```bash
-   npx wrangler secret put VAPID_PUBLIC_KEY
+   npm run secrets -- https://gopray.greenhouse247.org
+   ```
+
+2. Sign in to Cloudflare in the browser:
+
+   ```bash
+   npx wrangler login
+   ```
+
+3. Deploy, uploading the secrets with the code, then delete the secrets file:
+
+   ```bash
+   npm run deploy -- --secrets-file .secrets.json
    ```
 
    ```bash
-   npx wrangler secret put VAPID_PRIVATE_KEY
+   rm .secrets.json
    ```
 
-   ```bash
-   npx wrangler secret put SETUP_TOKEN
-   ```
-
-2. Deploy, then attach a short domain in the Cloudflare dashboard (a shorter
-   address makes a bolder QR code):
-
-   ```bash
-   npm run deploy
-   ```
-
-3. On the phone you will carry, open `https://<your-domain>/dash`, enter your
+4. On the phone you will carry, open `https://<your-address>/dash`, enter your
    name and the setup code. On iPhone, first use Share → Add to Home Screen and
    open it from the new icon, otherwise notifications cannot work.
-4. In Settings: turn on notifications, download a key backup, and download the
+5. In Settings: turn on notifications, download a key backup, and download the
    QR code for your hat.
-5. Remove the setup code so nobody else can create a station:
+6. Remove the setup code so nobody else can create a station:
 
    ```bash
    npx wrangler secret delete SETUP_TOKEN
