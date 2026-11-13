@@ -104,6 +104,8 @@ deployed with no manual step (Cloudflare calls this Workers Builds).
    Builds**, so other branches do not build previews of the app.
 4. Let the first build run. The app is live, but with no secrets yet, so no
    station can be created and notifications are off.
+   A build starts on each new push to `main` after the connection is made. If
+   none starts, use **Retry build** in the dashboard or push any commit.
 5. Add the secrets. On your own computer, create a random setup code and fresh
    notification keys, with your site's address as the contact for push services.
    This writes `.secrets.json` and prints only the setup code, which you keep:
