@@ -26,6 +26,14 @@
     // Requests, chat messages and pauses, per visitor address.
     { "name": "WRITE_LIMIT", "namespace_id": "4102", "simple": { "limit": 60, "period": 60 } }
   ],
+  // Preview builds (non-production branches) get their own rate-limit namespaces,
+  // so preview traffic never shares counters with production.
+  "previews": {
+    "ratelimits": [
+      { "name": "CREATE_LIMIT", "namespace_id": "4201", "simple": { "limit": 10, "period": 60 } },
+      { "name": "WRITE_LIMIT", "namespace_id": "4202", "simple": { "limit": 60, "period": 60 } }
+    ]
+  },
   // Privacy: keep request logs and traces off.
   "observability": { "enabled": false }
 }
