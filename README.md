@@ -7,7 +7,7 @@ hour unless the rider presses pause (each press adds 24 hours, at most 3 times a
 
 ## Demo
 
-[![Watch the demo: a rider scans the hat, sends a request, and sees it prayed for](docs/demo-poster.png)](https://youtu.be/otHNt3nmBQg)
+[![Watch the demo: a rider scans the hat, sends a request, and sees it prayed for](docs/demo-poster.png)](https://youtu.be/Tgwgdv8O1oM)
 
 Watch a rider scan the hat, send a request, and see it prayed for live.
 
